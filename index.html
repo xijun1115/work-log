@@ -62,6 +62,9 @@
   .badge.t3 { background: #dcfce7; color: #15803d; }
   .badge.t4 { background: #ede9fe; color: #6d28d9; }
   .badge.t5 { background: #ffedd5; color: #c2410c; }
+  .badge.k1 { background: #cffafe; color: #0e7490; }
+  .badge.k2 { background: #fce7f3; color: #be185d; }
+  td .clamp { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
   .badge.done { background: #dcfce7; color: #15803d; }
   .badge.undone { background: #fef3c7; color: #b45309; }
   .solved { color: var(--ok); white-space: nowrap; }
@@ -111,6 +114,7 @@
     <div class="tabs">
       <button id="tabTask" class="tab active" onclick="switchPage('task')">工作任务</button>
       <button id="tabGo" class="tab" onclick="switchPage('go')">客户上线</button>
+      <button id="tabKb" class="tab" onclick="switchPage('kb')">知识库</button>
     </div>
     <button class="ghost" onclick="openSettings()">⚙ 设置</button>
   </header>
@@ -188,6 +192,33 @@
     <tbody id="goTbody"></tbody>
   </table>
 </div><!-- /pageGo -->
+
+<div id="pageKb" style="display:none">
+  <div class="toolbar">
+    <button class="primary" onclick="openKbEdit()">＋ 新增知识条目</button>
+    <select id="kbFilterCat" onchange="render()">
+      <option value="">全部分类</option>
+      <option>云跨行FAQ</option>
+      <option>ERP对接</option>
+    </select>
+    <input type="search" id="kbKw" placeholder="搜索标题 / 内容…" oninput="render()">
+    <button class="ghost" onclick="exportKbCsv()">导出 CSV</button>
+    <div class="stats" id="kbStats"></div>
+  </div>
+
+  <div class="sync-bar">
+    <span class="dot" id="kbSyncDot"></span><span id="kbSyncText">本地模式（未配置 GitHub）</span>
+    <button class="ghost" style="padding:2px 8px;font-size:12px;" onclick="pullFromGitHub()">从 GitHub 拉取</button>
+    <button class="ghost" style="padding:2px 8px;font-size:12px;" onclick="pushToGitHub()">保存到 GitHub</button>
+  </div>
+
+  <table>
+    <thead>
+      <tr id="kbTheadRow"></tr>
+    </thead>
+    <tbody id="kbTbody"></tbody>
+  </table>
+</div><!-- /pageKb -->
 </div>
 
 <!-- 新增/编辑 模态框 -->
@@ -255,6 +286,36 @@
   </div>
 </div>
 
+<!-- 知识库 新增/编辑 模态框 -->
+<div class="mask" id="kbMask">
+  <div class="modal" style="width:720px">
+    <h2 id="kbEditTitle">新增知识条目</h2>
+    <div class="form-grid">
+      <div><label>分类 *</label><select id="kCat"><option>云跨行FAQ</option><option>ERP对接</option></select></div>
+      <div><label>记录日期</label><input type="date" id="kDate"></div>
+      <div class="full"><label>标题 / 问题 *</label><input type="text" id="kTitle" placeholder="如：云跨行余额查询返回为空怎么排查"></div>
+      <div class="full"><label>内容 / 解决办法</label><textarea id="kContent" style="min-height:140px" placeholder="现象、原因、处理步骤、注意事项…"></textarea></div>
+      <div class="full"><label>备注</label><input type="text" id="kNote"></div>
+    </div>
+    <div class="modal-foot">
+      <button onclick="closeKbEdit()">取消</button>
+      <button class="primary" onclick="saveKbEdit()">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- 知识库 详情 模态框 -->
+<div class="mask" id="kbViewMask">
+  <div class="modal" style="width:720px">
+    <h2 id="kbViewTitle">知识条目</h2>
+    <div class="view-grid" id="kbViewBody"></div>
+    <div class="modal-foot">
+      <button onclick="closeKbView()">关闭</button>
+      <button class="primary" onclick="closeKbView(); openKbEdit(kbViewingSeq)">编辑这条</button>
+    </div>
+  </div>
+</div>
+
 <!-- 设置 模态框 -->
 <div class="mask" id="setMask">
   <div class="modal">
@@ -264,6 +325,7 @@
       <div><label>分支</label><input type="text" id="sBranch" value="main"></div>
       <div><label>任务数据文件路径</label><input type="text" id="sPath" value="data/tasks.json"></div>
       <div class="full"><label>上线记录数据文件路径</label><input type="text" id="sGoPath" value="data/golive.json"></div>
+      <div class="full"><label>知识库数据文件路径</label><input type="text" id="sKbPath" value="data/kb.json"></div>
       <div class="full"><label>GitHub Token（fine-grained，仅需该仓库 Contents 读写权限）</label>
         <input type="password" id="sToken" placeholder="github_pat_…">
         <div class="hint">Token 只保存在本浏览器 localStorage，不会上传。建议用 Fine-grained token，只勾选这一个仓库的 Contents: Read and write。</div>
@@ -283,6 +345,8 @@ const LS_KEY = "worklog_tasks_v1";
 const LS_CFG = "worklog_gh_cfg_v1";
 const LS_COLS = "worklog_cols_v1";
 const GO_KEY = "worklog_golive_v1";
+const KB_KEY = "worklog_kb_v1";
+const KB_CATS = ["云跨行FAQ", "ERP对接"];
 const MODES = ["前置机", "前置机（软证书）", "免前置", "openAPI", "sftp", "SDK", "三方"];
 const GOCOLS = [
   { key: "ent",   label: "企业名称", w: "min-width:150px" },
@@ -310,17 +374,24 @@ const COLS = [
 
 let tasks = [];
 let golive = [];
-let page = "task";   // task | go
+let kb = [];
+let page = "task";   // task | go | kb
 let editingId = null;
 let visibleCols = new Set(COLS.map(c => c.key));
-const D = () => page === "task" ? tasks : golive;
+const D = () => page === "task" ? tasks : page === "go" ? golive : kb;
+
+const PAGES = {
+  task: { tab: "tabTask", body: "pageTask" },
+  go:   { tab: "tabGo",   body: "pageGo" },
+  kb:   { tab: "tabKb",   body: "pageKb" },
+};
 
 function switchPage(p) {
   page = p;
-  document.getElementById("tabTask").classList.toggle("active", p === "task");
-  document.getElementById("tabGo").classList.toggle("active", p === "go");
-  document.getElementById("pageTask").style.display = p === "task" ? "" : "none";
-  document.getElementById("pageGo").style.display = p === "go" ? "" : "none";
+  for (const [key, ids] of Object.entries(PAGES)) {
+    document.getElementById(ids.tab).classList.toggle("active", key === p);
+    document.getElementById(ids.body).style.display = key === p ? "" : "none";
+  }
   render();
 }
 
@@ -336,10 +407,12 @@ function saveCols() { localStorage.setItem(LS_COLS, JSON.stringify([...visibleCo
 function loadLocal() {
   try { tasks = JSON.parse(localStorage.getItem(LS_KEY)) || []; } catch { tasks = []; }
   try { golive = JSON.parse(localStorage.getItem(GO_KEY)) || []; } catch { golive = []; }
+  try { kb = JSON.parse(localStorage.getItem(KB_KEY)) || []; } catch { kb = []; }
 }
 function saveLocal() {
   localStorage.setItem(LS_KEY, JSON.stringify(tasks));
   localStorage.setItem(GO_KEY, JSON.stringify(golive));
+  localStorage.setItem(KB_KEY, JSON.stringify(kb));
 }
 function cfg() {
   try { return JSON.parse(localStorage.getItem(LS_CFG)) || {}; } catch { return {}; }
@@ -352,14 +425,16 @@ function ghHeaders() {
 }
 function ghUrl() {
   const c = cfg();
-  const path = page === "task" ? (c.path || "data/tasks.json") : (c.goPath || "data/golive.json");
+  const path = page === "task" ? (c.path || "data/tasks.json")
+    : page === "go" ? (c.goPath || "data/golive.json")
+    : (c.kbPath || "data/kb.json");
   return `https://api.github.com/repos/${c.repo}/contents/${path}`;
 }
 function b64encode(str) { return btoa(unescape(encodeURIComponent(str))); }
 function b64decode(str) { return decodeURIComponent(escape(atob(str.replace(/\n/g, "")))); }
 
 function setSync(state, text) {
-  [["syncDot", "syncText"], ["goSyncDot", "goSyncText"]].forEach(([d, t]) => {
+  [["syncDot", "syncText"], ["goSyncDot", "goSyncText"], ["kbSyncDot", "kbSyncText"]].forEach(([d, t]) => {
     const de = document.getElementById(d);
     if (de) { de.className = "dot " + (state || ""); document.getElementById(t).textContent = text; }
   });
@@ -403,7 +478,7 @@ async function pushToGitHub() {
     const r = await fetch(ghUrl() + "?ref=" + encodeURIComponent(c.branch || "main"), { headers: ghHeaders() });
     if (r.ok) sha = (await r.json()).sha;
     const body = {
-      message: `worklog: 更新${page === "task" ? "任务" : "上线"}记录 ` + new Date().toLocaleString("zh-CN"),
+      message: `worklog: 更新${page === "task" ? "任务" : page === "go" ? "上线" : "知识库"}记录 ` + new Date().toLocaleString("zh-CN"),
       content: b64encode(JSON.stringify(D(), null, 2)),
       branch: c.branch || "main",
     };
@@ -468,7 +543,7 @@ function toggleCol(key, show) {
   saveCols(); render(); buildColMenu();
 }
 
-function render() { page === "task" ? renderTask() : renderGo(); }
+function render() { page === "task" ? renderTask() : page === "go" ? renderGo() : renderKb(); }
 
 function renderTask() {
   const ft = document.getElementById("filterType").value;
@@ -682,6 +757,125 @@ function exportGoCsv() {
   golive.forEach(g => lines.push([g.seq, g.ent, g.bank, g.mode, g.date, g.city, g.impl, g.mgr]));
   const csv = "\uFEFF" + lines.map(r => r.map(v => `"${String(v ?? "").replace(/"/g, '""')}"`).join(",")).join("\r\n");
   download(`客户上线记录_${new Date().toISOString().slice(0, 10)}.csv`, csv, "text/csv;charset=utf-8");
+}
+
+/* ---------- 云跨行知识库页 ---------- */
+function catBadge(c) {
+  const i = KB_CATS.indexOf(c);
+  return `<span class="badge k${i >= 0 ? i + 1 : 2}">${esc(c)}</span>`;
+}
+
+function kbCellHtml(g, key) {
+  const dash = '<span style="color:var(--muted)">—</span>';
+  const nl = s => esc(s).replace(/\n/g, "<br>");
+  const ed = f => ` class="editable" data-field="${f}" title="双击编辑"`;
+  switch (key) {
+    case "cat":     return `<td>${catBadge(g.cat)}</td>`;
+    case "title":   return `<td${ed("title")}><b>${esc(g.title) || dash}</b></td>`;
+    case "content": return `<td${ed("content")}><div class="clamp">${nl(g.content) || dash}</div></td>`;
+    case "date":    return `<td>${esc(g.date) || dash}</td>`;
+    case "note":    return `<td${ed("note")}>${esc(g.note) || dash}</td>`;
+  }
+  return "<td></td>";
+}
+
+function renderKb() {
+  const fc = document.getElementById("kbFilterCat").value;
+  const kw = document.getElementById("kbKw").value.trim().toLowerCase();
+  const rows = kb.filter(g => {
+    if (fc && g.cat !== fc) return false;
+    if (kw && ![g.title, g.content, g.note].join(" ").toLowerCase().includes(kw)) return false;
+    return true;
+  });
+  const KBCOLS = [
+    { key: "cat",     label: "分类",       w: "width:110px" },
+    { key: "title",   label: "标题/问题",  w: "min-width:200px" },
+    { key: "content", label: "内容/办法",  w: "min-width:320px" },
+    { key: "date",    label: "记录日期",   w: "width:100px" },
+    { key: "note",    label: "备注",       w: "width:130px" },
+  ];
+  document.getElementById("kbTheadRow").innerHTML =
+    `<th style="width:46px">序号</th>` + KBCOLS.map(c => `<th style="${c.w}">${c.label}</th>`).join("") + `<th style="width:118px">操作</th>`;
+  document.getElementById("kbTbody").innerHTML = rows.length ? rows.map(g => `
+    <tr data-seq="${g.seq}">
+      <td class="seq">${g.seq}</td>
+      ${KBCOLS.map(c => kbCellHtml(g, c.key)).join("")}
+      <td class="actions">
+        <button class="ghost" style="padding:2px 8px;font-size:12px" onclick="openKbView(${g.seq})">详情</button>
+        <button class="ghost" style="padding:2px 8px;font-size:12px" onclick="openKbEdit(${g.seq})">编辑</button>
+        <button class="danger-link" onclick="delKb(${g.seq})">删除</button>
+      </td>
+    </tr>`).join("")
+    : `<tr><td colspan="${KBCOLS.length + 2}" class="empty-tip">暂无知识条目，点「＋ 新增知识条目」沉淀第一条</td></tr>`;
+  const faq = kb.filter(g => g.cat === "云跨行FAQ").length;
+  document.getElementById("kbStats").textContent = `共 ${kb.length} 条 · 云跨行FAQ ${faq} · ERP对接 ${kb.length - faq}`;
+  bindInlineEdit();
+}
+
+function nextKbSeq() { return kb.reduce((m, g) => Math.max(m, g.seq), 0) + 1; }
+let kbEditingId = null;
+let kbViewingSeq = null;
+
+function openKbEdit(seq) {
+  kbEditingId = seq || null;
+  const g = seq ? kb.find(x => x.seq === seq) : null;
+  document.getElementById("kbEditTitle").textContent = g ? `编辑知识条目 #${g.seq}` : "新增知识条目";
+  document.getElementById("kCat").value = g?.cat || KB_CATS[0];
+  document.getElementById("kDate").value = g?.date || new Date().toISOString().slice(0, 10);
+  document.getElementById("kTitle").value = g?.title || "";
+  document.getElementById("kContent").value = g?.content || "";
+  document.getElementById("kNote").value = g?.note || "";
+  document.getElementById("kbMask").classList.add("show");
+}
+function closeKbEdit() { document.getElementById("kbMask").classList.remove("show"); }
+
+function saveKbEdit() {
+  const title = document.getElementById("kTitle").value.trim();
+  if (!title) return alert("标题/问题为必填项");
+  const data = {
+    cat: document.getElementById("kCat").value,
+    date: document.getElementById("kDate").value || "",
+    title,
+    content: document.getElementById("kContent").value.trim(),
+    note: document.getElementById("kNote").value.trim(),
+  };
+  if (kbEditingId) Object.assign(kb.find(g => g.seq === kbEditingId), data);
+  else kb.push({ seq: nextKbSeq(), ...data });
+  kb.sort((a, b) => a.seq - b.seq);
+  saveLocal(); render(); closeKbEdit();
+}
+
+function delKb(seq) {
+  const g = kb.find(x => x.seq === seq);
+  if (!confirm(`确定删除知识条目 #${seq}？\n${g.title.slice(0, 40)}`)) return;
+  kb = kb.filter(x => x.seq !== seq);
+  saveLocal(); render();
+}
+
+function openKbView(seq) {
+  const g = kb.find(x => x.seq === seq);
+  if (!g) return;
+  kbViewingSeq = seq;
+  document.getElementById("kbViewTitle").textContent = `知识条目 #${g.seq}`;
+  const dash = '<span style="color:var(--muted)">—</span>';
+  const nl = s => esc(s).replace(/\n/g, "<br>");
+  const row = (k, v) => v ? `<div class="k">${k}</div><div class="v">${v}</div>` : "";
+  document.getElementById("kbViewBody").innerHTML =
+    row("分类", catBadge(g.cat)) +
+    row("标题/问题", `<b>${esc(g.title)}</b>`) +
+    row("记录日期", esc(g.date) || dash) +
+    row("内容/办法", nl(g.content) || dash) +
+    row("备注", esc(g.note) || dash);
+  document.getElementById("kbViewMask").classList.add("show");
+}
+function closeKbView() { document.getElementById("kbViewMask").classList.remove("show"); }
+
+function exportKbCsv() {
+  const head = ["序号", "分类", "标题/问题", "内容/办法", "记录日期", "备注"];
+  const lines = [head];
+  kb.forEach(g => lines.push([g.seq, g.cat, g.title, g.content, g.date, g.note]));
+  const csv = "\uFEFF" + lines.map(r => r.map(v => `"${String(v ?? "").replace(/"/g, '""')}"`).join(",")).join("\r\n");
+  download(`云跨行知识库_${new Date().toISOString().slice(0, 10)}.csv`, csv, "text/csv;charset=utf-8");
 }
 
 function resetFilters() {
@@ -919,6 +1113,7 @@ function openSettings() {
   document.getElementById("sBranch").value = c.branch || "main";
   document.getElementById("sPath").value = c.path || "data/tasks.json";
   document.getElementById("sGoPath").value = c.goPath || "data/golive.json";
+  document.getElementById("sKbPath").value = c.kbPath || "data/kb.json";
   document.getElementById("sToken").value = c.token || "";
   document.getElementById("setMask").classList.add("show");
 }
@@ -929,6 +1124,7 @@ function saveSettings() {
     branch: document.getElementById("sBranch").value.trim() || "main",
     path: document.getElementById("sPath").value.trim() || "data/tasks.json",
     goPath: document.getElementById("sGoPath").value.trim() || "data/golive.json",
+    kbPath: document.getElementById("sKbPath").value.trim() || "data/kb.json",
     token: document.getElementById("sToken").value.trim(),
   }));
   closeSettings();
