@@ -130,6 +130,15 @@
   button.danger-link { border: none; background: none; color: var(--danger); cursor: pointer; padding: 2px 6px; font-weight: 500; }
   button.danger-link:hover { text-decoration: underline; }
   .toolbar input[type="search"] { width: 210px; }
+  /* 可输入式筛选框（下拉候选 + 手动输入） */
+  datalist { display: none; }
+  .toolbar input[list] { width: 132px; cursor: text; }
+  .toolbar input[list]:not(:placeholder-shown) {
+    border-color: var(--primary);
+    background: color-mix(in srgb, var(--primary) 6%, var(--card));
+  }
+  #filterCustomer, #goFilterEnt { width: 196px; }
+  #goFilterBank { width: 138px; }
   .stats { color: var(--muted); font-size: 13px; margin-left: auto; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
   .stats b { color: var(--text); font-weight: 600; }
   .stats b.undone { color: #c2410c; }
@@ -334,9 +343,9 @@
       <option>未解决</option>
       <option>已完成</option>
     </select>
-    <select id="filterCustomer" onchange="render()">
-      <option value="">全部客户</option>
-    </select>
+    <input type="text" id="filterCustomer" list="filterCustomerList" placeholder="全部客户"
+           autocomplete="off" oninput="render()" title="可下拉选择，也可手动输入，支持模糊匹配">
+    <datalist id="filterCustomerList"></datalist>
     <select id="filterHandler" onchange="render()">
       <option value="">全部处理人</option>
     </select>
@@ -372,8 +381,12 @@
 <div id="pageGo" style="display:none">
   <div class="toolbar">
     <button class="primary" onclick="openGoEdit()">＋ 新增上线记录</button>
-    <select id="goFilterEnt" onchange="render()"><option value="">全部企业</option></select>
-    <select id="goFilterBank" onchange="render()"><option value="">全部银行</option></select>
+    <input type="text" id="goFilterEnt" list="goFilterEntList" placeholder="全部企业"
+           autocomplete="off" oninput="render()" title="可下拉选择，也可手动输入，支持模糊匹配">
+    <datalist id="goFilterEntList"></datalist>
+    <input type="text" id="goFilterBank" list="goFilterBankList" placeholder="全部银行"
+           autocomplete="off" oninput="render()" title="可下拉选择，也可手动输入，支持模糊匹配">
+    <datalist id="goFilterBankList"></datalist>
     <select id="goFilterMode" onchange="render()">
       <option value="">全部直联模式</option>
     </select>
@@ -756,11 +769,37 @@ function statusBadge(t) {
     : '<span class="badge undone">未解决</span>';
 }
 
+/* 筛选控件填充：
+   <select>        → 重建选项（保持选中项）
+   <input+datalist>→ 只更新候选，保留用户已输入的文字；候选没变化就不重建，避免打断输入 */
 function fillFilter(id, placeholder, values) {
-  const sel = document.getElementById(id);
-  const cur = sel.value;
-  sel.innerHTML = `<option value="">${placeholder}</option>` +
-    values.map(v => `<option${v === cur ? " selected" : ""}>${esc(v)}</option>`).join("");
+  const el = document.getElementById(id);
+  if (!el) return;
+  if (el.tagName === "SELECT") {
+    const cur = el.value;
+    el.innerHTML = `<option value="">${placeholder}</option>` +
+      values.map(v => `<option${v === cur ? " selected" : ""}>${esc(v)}</option>`).join("");
+    return;
+  }
+  if (el.dataset.base !== placeholder) {
+    el.placeholder = placeholder + "（可输入）";
+    el.dataset.base = placeholder;
+  }
+  const dl = document.getElementById(el.getAttribute("list"));
+  if (!dl) return;
+  const sig = values.join("\u0001");
+  if (dl.dataset.sig !== sig) {
+    dl.innerHTML = values.map(v => `<option value="${esc(v)}"></option>`).join("");
+    dl.dataset.sig = sig;
+  }
+}
+
+/* 筛选命中：空=不过滤；精确相等或包含（忽略大小写）都算命中，故支持手输模糊匹配 */
+function hit(val, f) {
+  const s = String(f ?? "").trim();
+  if (!s) return true;
+  const v = String(val ?? "");
+  return v === s || v.toLowerCase().includes(s.toLowerCase());
 }
 
 /* 单元格渲染器：按列 key 输出 td */
@@ -814,7 +853,7 @@ function renderTask() {
   const rows = tasks.filter(t => {
     if (ft && t.type !== ft) return false;
     if (fs && statusOf(t) !== fs) return false;
-    if (fc && (t.customer || "") !== fc) return false;
+    if (fc && !hit(t.customer, fc)) return false;
     if (fh && (t.handler || "") !== fh) return false;
     if (fd && t.date !== fd) return false;
     if (kw && ![t.desc, t.cause, t.solution, t.note, t.customer, t.handler, ...(t.trail || []).map(e => e.text)].join(" ").toLowerCase().includes(kw)) return false;
@@ -871,8 +910,8 @@ function renderGo() {
   const fDate = fv("goFilterDate"), fCity = fv("goFilterCity"), fImpl = fv("goFilterImpl"), fMgr = fv("goFilterMgr");
   const kw = fv("goKw").trim().toLowerCase();
   const rows = golive.filter(g => {
-    if (fEnt && g.ent !== fEnt) return false;
-    if (fBank && g.bank !== fBank) return false;
+    if (fEnt && !hit(g.ent, fEnt)) return false;
+    if (fBank && !hit(g.bank, fBank)) return false;
     if (fm && g.mode !== fm) return false;
     if (fDate && g.date !== fDate) return false;
     if (fCity && g.city !== fCity) return false;
