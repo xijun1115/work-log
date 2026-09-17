@@ -110,6 +110,13 @@
   .att-chip a { color: var(--primary); text-decoration: none; }
   .att-chip .rm { cursor: pointer; color: var(--danger); padding: 0 2px; border: none; background: none; font-size: 13px; }
   .paperclip { color: var(--primary); cursor: pointer; font-size: 12px; margin-left: 6px; white-space: nowrap; }
+  /* 行拖动排序 */
+  tr.draggable-row { cursor: grab; }
+  tr.draggable-row.dragging { opacity: .35; }
+  tr.draggable-row.drop-target > td { border-top: 2px solid var(--primary); }
+  .drag-handle { color: var(--muted); font-size: 12px; margin-right: 4px; opacity: 0; transition: opacity .12s; user-select: none; }
+  tr.draggable-row:hover .drag-handle { opacity: .7; }
+  .move-btn { padding: 0 5px; font-size: 12px; line-height: 18px; }
   /* 详情弹窗 */
   .view-grid { display: grid; grid-template-columns: 96px 1fr; gap: 8px 12px; font-size: 13px; }
   .view-grid .k { color: var(--muted); white-space: nowrap; }
@@ -197,6 +204,7 @@
     <select id="goFilterMgr" onchange="render()"><option value="">全部客户经理</option></select>
     <input type="search" id="goKw" placeholder="搜索关键词…" oninput="render()">
     <button class="ghost" onclick="resetGoFilters()">重置筛选</button>
+    <button class="ghost" onclick="sortGoByDate()" title="按上线日期从早到晚重排">⇅ 按日期排序</button>
     <label class="ghost" style="cursor:pointer;border:1px solid var(--border);border-radius:6px;padding:6px 10px;">
       📥 导入 Excel<input type="file" accept=".xlsx,.xls" style="display:none" onchange="importGoExcel(this)">
     </label>
@@ -457,11 +465,12 @@ function loadLocal() {
   try { tasks = JSON.parse(localStorage.getItem(LS_KEY)) || []; } catch { tasks = []; }
   try { golive = JSON.parse(localStorage.getItem(GO_KEY)) || []; } catch { golive = []; }
   try { kb = JSON.parse(localStorage.getItem(KB_KEY)) || []; } catch { kb = []; }
-  /* 迁移修复：Excel 导入的历史数据序号可能是文本或重复的，统一成数字；重复则重排 */
+  /* 迁移修复：Excel 导入的历史数据序号可能是文本或重复的，统一成数字；重复则重排
+     注意：顺序沿用数组现有顺序（用户拖动排序的结果），不能按 seq 重排 */
   tasks.forEach(t => { if (typeof t.seq !== "number" || isNaN(t.seq)) t.seq = parseInt(t.seq) || 0; });
-  golive.forEach(g => { if (typeof g.seq !== "number" || isNaN(g.seq)) g.seq = parseInt(g.seq) || 0; });
   const seen = new Set();
-  golive.sort((a, b) => a.seq - b.seq).forEach(g => {
+  golive.forEach(g => {
+    if (typeof g.seq !== "number" || isNaN(g.seq)) g.seq = parseInt(g.seq) || 0;
     if (!g.seq || seen.has(g.seq)) g.seq = (golive.reduce((m, x) => Math.max(m, x.seq), 0) || 0) + 1;
     seen.add(g.seq);
   });
@@ -526,7 +535,8 @@ async function pullFromGitHub(kind, silent) {
     const seqs = new Set(arr.map(t => t.seq));
     let added = 0;
     for (const t of remote) if (!seqs.has(t.seq)) { arr.push(t); added++; }
-    arr.sort((a, b) => a.seq - b.seq);
+    /* 上线记录的行顺序由用户拖动决定，不能按 seq 重排；本地为空时会自然沿用远端的顺序 */
+    if (k !== "go") arr.sort((a, b) => a.seq - b.seq);
     saveLocal(); render();
     setSync("ok", `拉取成功：远端 ${remote.length} 条，新增 ${added} 条`);
   } catch (e) { setSync("err", "拉取失败：" + e.message); }
@@ -692,20 +702,27 @@ function renderGo() {
     if (kw && ![g.ent, g.bank, g.city, g.impl, g.mgr, g.mode, g.date].join(" ").toLowerCase().includes(kw)) return false;
     return true;
   });
+  const noFilter = rows.length === golive.length;
+  const pos = new Map(golive.map((g, i) => [g.seq, i + 1]));
   document.getElementById("goTheadRow").innerHTML =
-    `<th style="width:46px">序号</th>` + GOCOLS.map(c => `<th style="${c.w}">${c.label}</th>`).join("") + `<th style="width:118px">操作</th>`;
+    `<th style="width:66px">序号</th>` + GOCOLS.map(c => `<th style="${c.w}">${c.label}</th>`).join("") + `<th style="width:172px">操作</th>`;
   document.getElementById("goTbody").innerHTML = rows.length ? rows.map(g => `
-    <tr data-seq="${g.seq}">
-      <td class="seq">${g.seq}</td>
+    <tr data-seq="${g.seq}" class="draggable-row" draggable="true"
+        ondragstart="goDragStart(event, ${g.seq})" ondragover="goDragOver(event, ${g.seq})"
+        ondrop="goDrop(event, ${g.seq})" ondragend="goDragEnd()">
+      <td class="seq" title="按住拖动可调整顺序"><span class="drag-handle">⠿</span>${pos.get(g.seq)}</td>
       ${GOCOLS.map(c => goCellHtml(g, c.key)).join("")}
       <td class="actions">
+        <button class="ghost move-btn" onclick="moveGo(${g.seq}, -1)" title="上移一位">↑</button>
+        <button class="ghost move-btn" onclick="moveGo(${g.seq}, 1)" title="下移一位">↓</button>
         <button class="ghost" style="padding:2px 8px;font-size:12px" onclick="openGoEdit(${g.seq})">编辑</button>
         <button class="danger-link" onclick="delGo(${g.seq})">删除</button>
       </td>
     </tr>`).join("")
     : `<tr><td colspan="${GOCOLS.length + 2}" class="empty-tip">暂无上线记录，可「＋ 新增上线记录」或「📥 导入 Excel」历史数据</td></tr>`;
   document.getElementById("goStats").textContent =
-    `共 ${golive.length} 条上线记录` + (rows.length !== golive.length ? `（筛选出 ${rows.length} 条）` : "");
+    `共 ${golive.length} 条上线记录` + (rows.length !== golive.length ? `（筛选出 ${rows.length} 条）` : "") +
+    (noFilter && golive.length > 1 ? " · 可拖动行或点 ↑↓ 调整顺序" : "");
   const uniq = k => [...new Set(golive.map(g => g[k]).filter(Boolean))];
   fillFilter("goFilterEnt", "全部企业", uniq("ent").sort());
   fillFilter("goFilterBank", "全部银行", uniq("bank").sort());
@@ -724,6 +741,66 @@ function resetGoFilters() {
 }
 
 function nextGoSeq() { return golive.reduce((m, g) => Math.max(m, g.seq), 0) + 1; }
+
+/* ---------- 上线记录排序（拖动 / ↑↓ 按钮） ---------- */
+let dragSeq = null;
+function hasGoFilter() {
+  const ids = ["goFilterEnt", "goFilterBank", "goFilterMode", "goFilterCity", "goFilterImpl", "goFilterMgr", "goFilterDate", "goKw"];
+  return ids.some(id => document.getElementById(id).value.trim());
+}
+/* 把 fromSeq 移动到 toSeq 所在位置（拖放插入语义） */
+function reorderGo(fromSeq, toSeq) {
+  const from = golive.findIndex(g => g.seq === fromSeq);
+  const to = golive.findIndex(g => g.seq === toSeq);
+  if (from < 0 || to < 0 || from === to) return false;
+  const [item] = golive.splice(from, 1);
+  golive.splice(to, 0, item);
+  saveLocal(); render();
+  return true;
+}
+function moveGo(seq, delta) {
+  if (hasGoFilter()) return alert("当前有筛选条件，顺序会看不准。\n请先点「重置筛选」再调整顺序。");
+  const i = golive.findIndex(g => g.seq === seq);
+  const j = i + delta;
+  if (i < 0 || j < 0 || j >= golive.length) return;
+  const [item] = golive.splice(i, 1);
+  golive.splice(j, 0, item);
+  saveLocal(); render();
+}
+function goDragStart(ev, seq) {
+  if (hasGoFilter()) { ev.preventDefault(); return alert("当前有筛选条件，顺序会看不准。\n请先点「重置筛选」再拖动排序。"); }
+  dragSeq = seq;
+  ev.dataTransfer.effectAllowed = "move";
+  try { ev.dataTransfer.setData("text/plain", String(seq)); } catch (e) {}
+  ev.currentTarget.classList.add("dragging");
+}
+function goDragOver(ev, seq) {
+  if (dragSeq == null || dragSeq === seq) return;
+  ev.preventDefault();
+  ev.dataTransfer.dropEffect = "move";
+  const tr = ev.currentTarget;
+  document.querySelectorAll("#goTbody tr.drop-target").forEach(x => { if (x !== tr) x.classList.remove("drop-target"); });
+  tr.classList.add("drop-target");
+}
+function goDrop(ev, seq) {
+  ev.preventDefault();
+  document.querySelectorAll("#goTbody tr.drop-target").forEach(x => x.classList.remove("drop-target"));
+  if (dragSeq == null || dragSeq === seq) return;
+  const from = dragSeq;
+  dragSeq = null;
+  reorderGo(from, seq);
+}
+function goDragEnd() {
+  dragSeq = null;
+  document.querySelectorAll("#goTbody tr").forEach(x => { x.classList.remove("dragging", "drop-target"); });
+}
+/* 按上线日期重排（同一日期保持现有相对顺序） */
+function sortGoByDate() {
+  if (hasGoFilter()) return alert("当前有筛选条件，请先点「重置筛选」再排序。");
+  if (!confirm("按「上线日期」从早到晚重排全部记录？\n（日期为空的排到最后）")) return;
+  golive.sort((a, b) => (a.date || "9999").localeCompare(b.date || "9999"));
+  saveLocal(); render();
+}
 let goEditingId = null;
 
 function openGoEdit(seq) {
@@ -760,7 +837,7 @@ function saveGoEdit() {
     Object.assign(rec, data);
   }
   else golive.push({ seq: nextGoSeq(), ...data });
-  golive.sort((a, b) => a.seq - b.seq);
+  /* 不按 seq 重排：行顺序由用户拖动/↑↓ 决定，seq 只作内部标识 */
   saveLocal(); render(); closeGoEdit();
 }
 
@@ -863,7 +940,7 @@ async function doGoImport(file) {
       if (!rec.seq) rec.seq = ++maxSeq;
       golive.push(rec); added++;
     });
-    golive.sort((a, b) => a.seq - b.seq);
+    /* 保持现有行顺序，新导入的追加在后面，不打乱手工排序 */
     saveLocal(); render();
     alert(`导入完成：新增 ${added} 条，补充已有记录 ${updated} 处，跳过（重复/空行）${skipped} 条\n使用列：${Object.entries(col).filter(([, v]) => v).map(([f, v]) => f + "←" + v).join("，")}`);
   } catch (e) { alert("导入失败：" + e.message); }
@@ -872,7 +949,7 @@ async function doGoImport(file) {
 function exportGoCsv() {
   const head = ["序号", "企业名称", "银行名称", "直联模式", "上线日期", "城市", "实施人员", "客户经理"];
   const lines = [head];
-  golive.forEach(g => lines.push([g.seq, g.ent, g.bank, g.mode, g.date, g.city, g.impl, g.mgr]));
+  golive.forEach((g, i) => lines.push([i + 1, g.ent, g.bank, g.mode, g.date, g.city, g.impl, g.mgr]));
   const csv = "\uFEFF" + lines.map(r => r.map(v => `"${String(v ?? "").replace(/"/g, '""')}"`).join(",")).join("\r\n");
   download(`客户上线记录_${new Date().toISOString().slice(0, 10)}.csv`, csv, "text/csv;charset=utf-8");
 }
