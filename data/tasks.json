@@ -151,24 +151,6 @@
     "note": ""
   },
   {
-    "seq": 8,
-    "date": "2026-09-17",
-    "type": "云跨行上线",
-    "customer": "联泰集团",
-    "desc": "云跨行上线（专线）",
-    "cause": "",
-    "solution": "",
-    "solvedDate": "",
-    "status": "未解决",
-    "att": {
-      "desc": [],
-      "cause": [],
-      "solution": []
-    },
-    "handler": "陈锡君",
-    "note": ""
-  },
-  {
     "seq": 9,
     "date": "2026-09-17",
     "type": "生产运维",
@@ -226,6 +208,24 @@
       "solution": []
     },
     "handler": "",
+    "note": ""
+  },
+  {
+    "seq": 12,
+    "date": "2026-09-17",
+    "type": "生产运维",
+    "customer": "珠光汽车",
+    "desc": "代发经办用户做代发录入时显示的“发薪单位”比做了代发配置的单位（17个）多",
+    "cause": "",
+    "solution": "",
+    "solvedDate": "",
+    "status": "未解决",
+    "att": {
+      "desc": [],
+      "cause": [],
+      "solution": []
+    },
+    "handler": "陈锡君",
     "note": ""
   }
 ]
