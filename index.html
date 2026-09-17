@@ -37,6 +37,13 @@
   .toolbar input[type="search"] { width: 200px; }
   .stats { color: var(--muted); font-size: 13px; margin-left: auto; }
   .stats b.undone { color: #b45309; }
+  /* 列设置下拉 */
+  .colpick { position: relative; }
+  .colpick summary { list-style: none; cursor: pointer; border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px; background: var(--card); color: var(--text); white-space: nowrap; }
+  .colpick summary::-webkit-details-marker { display: none; }
+  .colpick[open] summary { border-color: var(--primary); color: var(--primary); }
+  .colpick .menu { position: absolute; top: calc(100% + 4px); left: 0; z-index: 5; background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; box-shadow: 0 4px 14px rgba(0,0,0,.18); display: grid; gap: 5px; min-width: 130px; }
+  .colpick .menu label { display: flex; align-items: center; gap: 6px; margin: 0; color: var(--text); font-size: 13px; white-space: nowrap; cursor: pointer; }
   table { width: 100%; border-collapse: collapse; background: var(--card); border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
   th, td { border-bottom: 1px solid var(--border); padding: 8px 10px; text-align: left; vertical-align: top; }
   th { background: var(--card); font-size: 13px; color: var(--muted); position: sticky; top: 0; white-space: nowrap; }
@@ -101,6 +108,10 @@
     <input type="date" id="filterDate" onchange="render()" title="按提出日期筛选">
     <input type="search" id="kw" placeholder="搜索关键词…" oninput="render()">
     <button class="ghost" onclick="resetFilters()">重置筛选</button>
+    <details class="colpick" id="colPick">
+      <summary>显示列 ▾</summary>
+      <div class="menu" id="colMenu"></div>
+    </details>
     <button class="ghost" onclick="exportCsv()">导出 CSV</button>
     <button class="ghost" onclick="exportJson()">导出 JSON</button>
     <label class="ghost" style="cursor:pointer;border:1px solid var(--border);border-radius:6px;padding:6px 10px;">
@@ -117,12 +128,7 @@
 
   <table>
     <thead>
-      <tr>
-        <th style="width:46px">序号</th><th style="width:100px">提出日期</th>
-        <th style="width:110px">任务类型</th><th style="width:110px">客户名称</th><th style="min-width:200px">任务描述</th>
-        <th style="min-width:160px">问题原因</th><th style="min-width:160px">解决方案</th>
-        <th style="width:100px">解决日期</th><th style="width:76px">状态</th><th style="width:90px">处理人</th><th style="width:110px">备注</th><th style="width:90px">操作</th>
-      </tr>
+      <tr id="theadRow"></tr>
     </thead>
     <tbody id="tbody"></tbody>
   </table>
@@ -177,9 +183,33 @@ const TYPES = ["他行直联测试", "生产问题", "业务需求"];
 const CUSTOMER_PRESETS = ["吉邦精密", "中铁二十五局", "金发科技", "广晟财司", "广州农商行", "香山电子", "曼秀雷敦", "惠州大亚湾水务", "广州数科", "安保集团", "珠海交控", "广省智协", "广东太力", "佐登妮丝", "信银理财", "珠光汽车", "清远国投", "六盯目"];
 const LS_KEY = "worklog_tasks_v1";
 const LS_CFG = "worklog_gh_cfg_v1";
+const LS_COLS = "worklog_cols_v1";
+
+/* 可配置显示的列（序号、操作始终显示） */
+const COLS = [
+  { key: "date",      label: "提出日期", w: "width:100px" },
+  { key: "type",      label: "任务类型", w: "width:110px" },
+  { key: "customer",  label: "客户名称", w: "width:110px" },
+  { key: "desc",      label: "任务描述", w: "min-width:200px" },
+  { key: "cause",     label: "问题原因", w: "min-width:160px" },
+  { key: "solution",  label: "解决方案", w: "min-width:160px" },
+  { key: "solvedDate",label: "解决日期", w: "width:100px" },
+  { key: "status",    label: "状态",     w: "width:76px" },
+  { key: "handler",   label: "处理人",   w: "width:90px" },
+  { key: "note",      label: "备注",     w: "width:110px" },
+];
 
 let tasks = [];
 let editingId = null;
+let visibleCols = new Set(COLS.map(c => c.key));
+
+function loadCols() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(LS_COLS));
+    if (Array.isArray(saved) && saved.length) visibleCols = new Set(saved.filter(k => COLS.some(c => c.key === k)));
+  } catch {}
+}
+function saveCols() { localStorage.setItem(LS_COLS, JSON.stringify([...visibleCols])); }
 
 /* ---------- 存取 ---------- */
 function loadLocal() {
@@ -271,6 +301,36 @@ function fillFilter(id, placeholder, values) {
     values.map(v => `<option${v === cur ? " selected" : ""}>${esc(v)}</option>`).join("");
 }
 
+/* 单元格渲染器：按列 key 输出 td */
+function cellHtml(t, key) {
+  const dash = '<span style="color:var(--muted)">—</span>';
+  const nl = s => esc(s).replace(/\n/g, "<br>");
+  switch (key) {
+    case "date":      return `<td>${t.date}</td>`;
+    case "type":      return `<td>${typeBadge(t.type)}</td>`;
+    case "customer":  return `<td class="editable" data-field="customer" title="双击编辑">${esc(t.customer) || dash}</td>`;
+    case "desc":      return `<td class="editable" data-field="desc" title="双击编辑">${nl(t.desc)}</td>`;
+    case "cause":     return `<td class="editable" data-field="cause" title="双击编辑">${nl(t.cause) || dash}</td>`;
+    case "solution":  return `<td class="editable" data-field="solution" title="双击编辑">${nl(t.solution) || dash}</td>`;
+    case "solvedDate":return `<td>${t.solvedDate ? `<span class="solved">✔ ${t.solvedDate}</span>` : dash}</td>`;
+    case "status":    return `<td class="editable" data-field="status" title="双击切换状态">${statusBadge(t)}</td>`;
+    case "handler":   return `<td class="editable" data-field="handler" title="双击编辑">${esc(t.handler) || dash}</td>`;
+    case "note":      return `<td class="editable" data-field="note" title="双击编辑">${esc(t.note) || dash}</td>`;
+  }
+  return "<td></td>";
+}
+
+function buildColMenu() {
+  document.getElementById("colMenu").innerHTML = COLS.map(c =>
+    `<label><input type="checkbox" ${visibleCols.has(c.key) ? "checked" : ""} onchange="toggleCol('${c.key}', this.checked)">${c.label}</label>`
+  ).join("");
+}
+function toggleCol(key, show) {
+  show ? visibleCols.add(key) : visibleCols.delete(key);
+  if (!visibleCols.size) visibleCols = new Set(["desc"]);  /* 至少留一列 */
+  saveCols(); render(); buildColMenu();
+}
+
 function render() {
   const ft = document.getElementById("filterType").value;
   const fs = document.getElementById("filterStatus").value;
@@ -287,26 +347,20 @@ function render() {
     if (kw && ![t.desc, t.cause, t.solution, t.note, t.customer, t.handler].join(" ").toLowerCase().includes(kw)) return false;
     return true;
   });
+  const vis = COLS.filter(c => visibleCols.has(c.key));
+  document.getElementById("theadRow").innerHTML =
+    `<th style="width:46px">序号</th>` + vis.map(c => `<th style="${c.w}">${c.label}</th>`).join("") + `<th style="width:90px">操作</th>`;
   const tb = document.getElementById("tbody");
   tb.innerHTML = rows.length ? rows.map(t => `
     <tr class="${statusOf(t) === "已完成" ? "" : "undone"}" data-seq="${t.seq}">
       <td class="seq">${t.seq}</td>
-      <td>${t.date}</td>
-      <td>${typeBadge(t.type)}</td>
-      <td class="editable" data-field="customer" title="双击编辑">${esc(t.customer) || '<span style="color:var(--muted)">—</span>'}</td>
-      <td class="editable" data-field="desc" title="双击编辑">${esc(t.desc).replace(/\n/g, "<br>")}</td>
-      <td class="editable" data-field="cause" title="双击编辑">${esc(t.cause).replace(/\n/g, "<br>") || '<span style="color:var(--muted)">—</span>'}</td>
-      <td class="editable" data-field="solution" title="双击编辑">${esc(t.solution).replace(/\n/g, "<br>") || '<span style="color:var(--muted)">—</span>'}</td>
-      <td>${t.solvedDate ? `<span class="solved">✔ ${t.solvedDate}</span>` : '<span style="color:var(--muted)">—</span>'}</td>
-      <td class="editable" data-field="status" title="双击切换状态">${statusBadge(t)}</td>
-      <td class="editable" data-field="handler" title="双击编辑">${esc(t.handler) || '<span style="color:var(--muted)">—</span>'}</td>
-      <td class="editable" data-field="note" title="双击编辑">${esc(t.note) || '<span style="color:var(--muted)">—</span>'}</td>
+      ${vis.map(c => cellHtml(t, c.key)).join("")}
       <td class="actions">
         <button class="ghost" style="padding:2px 8px;font-size:12px" onclick="openEdit(${t.seq})">编辑</button>
         <button class="danger-link" onclick="delTask(${t.seq})">删除</button>
       </td>
     </tr>`).join("")
-    : `<tr><td colspan="12" class="empty-tip">暂无记录，点右上角「＋ 新增任务」开始</td></tr>`;
+    : `<tr><td colspan="${vis.length + 2}" class="empty-tip">暂无记录，点右上角「＋ 新增任务」开始</td></tr>`;
 
   const undone = tasks.filter(t => statusOf(t) !== "已完成").length;
   document.getElementById("stats").innerHTML =
@@ -489,10 +543,16 @@ function importJson(input) {
 /* ---------- init ---------- */
 (function init() {
   loadLocal();
+  loadCols();
+  buildColMenu();
   const ft = document.getElementById("filterType");
   ft.innerHTML = `<option value="">全部类型</option>` + TYPES.map(t => `<option>${t}</option>`).join("");
   const c = cfg();
   if (c.repo && c.token) setSync("", "已配置 GitHub，可拉取/保存");
+  document.addEventListener("click", e => {
+    const d = document.getElementById("colPick");
+    if (d.open && !d.contains(e.target)) d.open = false;   /* 点外面关闭列设置 */
+  });
   render();
 })();
 </script>
