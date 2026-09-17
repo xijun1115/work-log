@@ -8,6 +8,15 @@
 
 数据可同步到 GitHub 私有仓库（`data/tasks.json` / `data/golive.json` / `data/kb.json`），跨设备可用。
 
+## 线上地址
+
+**https://xijun-worklog.netlify.app**（Netlify 托管，部署的是 `site/index.html`，纯页面不含数据）
+
+- 数据不放线上：客户数据只存在浏览器 localStorage + GitHub 私有仓库
+- 新浏览器/新电脑首次使用：打开网址 → 设置里填 GitHub token（一次）→ 点「从 GitHub 拉取」
+- 日常：数据有变动后点「保存到 GitHub」
+- 更新代码：把最新 index.html 拷到 `site/` 目录，然后 `netlify deploy --dir .` + `restoreSiteDeploy` 转正（`--prod` 会 Forbidden）
+
 ## 字段
 
 | 字段 | 说明 |
