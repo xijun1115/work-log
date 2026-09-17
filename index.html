@@ -482,7 +482,7 @@
         <div class="att-row" data-att="solution"><button type="button" class="ghost att-add" onclick="pickAtt('solution')">📎 添加截图/文件</button><input type="file" id="attFile-solution" multiple style="display:none" onchange="addAtt('solution', this)"><div class="att-list" id="attList-solution"></div></div>
       </div>
       <div><label>解决日期（完成后填写）</label><input type="date" id="fSolved"></div>
-      <div><label>任务状态</label><select id="fStatus"><option>未解决</option><option>已完成</option></select></div>
+      <div><label>任务状态</label><select id="fStatus" onchange="syncStatusSolved()"><option>未解决</option><option>已完成</option></select></div>
       <div><label>处理人</label><input type="text" id="fHandler" list="handlerList" placeholder="输入或从下拉选择"></div>
       <div class="full"><label>备注</label><input type="text" id="fNote"></div>
       <datalist id="handlerList"></datalist>
@@ -678,6 +678,11 @@ function loadLocal() {
   /* 迁移修复：Excel 导入的历史数据序号可能是文本或重复的，统一成数字；重复则重排
      注意：顺序沿用数组现有顺序（用户拖动排序的结果），不能按 seq 重排 */
   tasks.forEach(t => { if (typeof t.seq !== "number" || isNaN(t.seq)) t.seq = parseInt(t.seq) || 0; });
+  /* 自愈：状态与解决日期矛盾时以 status 为准（避免「未解决」被旧日期顶回「已完成」） */
+  tasks.forEach(t => {
+    if (t.status === "未解决" && t.solvedDate) t.solvedDate = "";
+    if (t.status === "已完成" && !t.solvedDate) t.solvedDate = t.date || "";
+  });
   const seen = new Set();
   golive.forEach(g => {
     if (typeof g.seq !== "number" || isNaN(g.seq)) g.seq = parseInt(g.seq) || 0;
@@ -1419,6 +1424,14 @@ function openEdit(seq) {
 }
 function closeEdit() { document.getElementById("editMask").classList.remove("show"); }
 
+/* 状态改了立刻同步解决日期，避免出现「未解决 + 却填着解决日期」的矛盾数据 */
+function syncStatusSolved() {
+  const st = document.getElementById("fStatus").value;
+  const sd = document.getElementById("fSolved");
+  if (st === "未解决") sd.value = "";
+  else if (!sd.value) sd.value = new Date().toISOString().slice(0, 10);
+}
+
 function saveEdit() {
   const date = document.getElementById("fDate").value;
   let type = document.getElementById("fType").value;
@@ -1426,10 +1439,12 @@ function saveEdit() {
   const desc = document.getElementById("fDesc").value.trim();
   if (!date || !type || !desc) return alert("提出日期、任务类型、任务描述为必填项");
   let solvedDate = document.getElementById("fSolved").value || "";
-  let status = document.getElementById("fStatus").value;
-  if (solvedDate && status !== "已完成") status = "已完成";   /* 填了解决日期视为已完成 */
-  if (status === "已完成" && !solvedDate) solvedDate = new Date().toISOString().slice(0, 10);
+  const status = document.getElementById("fStatus").value;
+  /* 状态与解决日期保持一致，但以「状态」为准：
+     选「未解决」→ 清空解决日期（哪怕表单里还留着旧日期，也必须清掉，
+     否则 statusOf 之外的推断逻辑和旧数据迁移都会把它当成已完成） */
   if (status === "未解决") solvedDate = "";
+  if (status === "已完成" && !solvedDate) solvedDate = new Date().toISOString().slice(0, 10);
   const data = {
     date, type,
     customer: document.getElementById("fCustomer").value.trim(),
