@@ -67,6 +67,24 @@
   td .clamp { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
   .badge.done { background: #dcfce7; color: #15803d; }
   .badge.undone { background: #fef3c7; color: #b45309; }
+  /* 任务链路 */
+  .trail-badge { display: inline-block; font-size: 11px; border-radius: 10px; padding: 1px 7px; margin-left: 6px; cursor: pointer; white-space: nowrap; }
+  .trail-badge.ok   { background: #dcfce7; color: #15803d; }
+  .trail-badge.block{ background: #fee2e2; color: #b91c1c; }
+  .trail-badge.n    { background: var(--hover, #f1f5f9); color: var(--muted); }
+  .timeline { position: relative; margin: 6px 0 2px 6px; padding-left: 20px; border-left: 2px solid var(--border, #e2e8f0); max-height: 320px; overflow: auto; }
+  .tl-item { position: relative; padding: 0 0 14px 4px; }
+  .tl-item:last-child { padding-bottom: 2px; }
+  .tl-item::before { content: ""; position: absolute; left: -26px; top: 4px; width: 10px; height: 10px; border-radius: 50%; background: var(--card); border: 2px solid #94a3b8; }
+  .tl-item.block::before { border-color: #dc2626; background: #fee2e2; }
+  .tl-item.ok::before { border-color: #16a34a; background: #dcfce7; }
+  .tl-meta { font-size: 12px; color: var(--muted); margin-bottom: 2px; display: flex; align-items: center; gap: 8px; }
+  .tl-kind { font-size: 11px; border-radius: 9px; padding: 0 7px; }
+  .tl-kind.进展 { background: #dcfce7; color: #15803d; }
+  .tl-kind.卡点 { background: #fee2e2; color: #b91c1c; }
+  .tl-text { font-size: 13px; white-space: pre-wrap; word-break: break-all; }
+  .tl-del { font-size: 11px; color: var(--danger, #dc2626); cursor: pointer; margin-left: auto; opacity: .6; }
+  .tl-del:hover { opacity: 1; }
   .solved { color: var(--ok); white-space: nowrap; }
   .actions { white-space: nowrap; }
   .empty-tip { text-align: center; color: var(--muted); padding: 40px 0; }
@@ -265,7 +283,31 @@
     <div class="view-grid" id="viewBody"></div>
     <div class="modal-foot">
       <button onclick="closeView()">关闭</button>
+      <button onclick="closeView(); openTrail(viewingSeq)">🔗 链路</button>
       <button class="primary" id="viewEditBtn" onclick="closeView(); openEdit(viewingSeq)">编辑这条</button>
+    </div>
+  </div>
+</div>
+
+<!-- 任务链路 模态框 -->
+<div class="mask" id="trailMask">
+  <div class="modal" style="width:680px">
+    <h2 id="trailTitle">任务链路</h2>
+    <div id="trailHead" style="font-size:13px;color:var(--muted);margin:-6px 0 10px"></div>
+    <div class="timeline" id="trailList"></div>
+    <div class="full" style="margin-top:14px">
+      <label>添加记录</label>
+      <div style="display:flex; gap:8px">
+        <select id="trailKind" style="width:96px;flex:none">
+          <option>进展</option>
+          <option>卡点</option>
+        </select>
+        <input type="text" id="trailText" placeholder="当前进展或卡点说明，如：银行侧接口已开通，等待前置机部署" style="flex:1" onkeydown="if(event.key==='Enter')addTrailEntry()">
+        <button class="primary" style="flex:none" onclick="addTrailEntry()">＋ 添加</button>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button onclick="closeTrail()">关闭</button>
     </div>
   </div>
 </div>
@@ -538,11 +580,18 @@ function cellHtml(t, key) {
   const dash = '<span style="color:var(--muted)">—</span>';
   const nl = s => esc(s).replace(/\n/g, "<br>");
   const clip = f => (t.att?.[f] || []).length ? ATT_MARK(f) : "";
+  const trailMark = () => {
+    const tr = t.trail || [];
+    if (!tr.length) return "";
+    const last = tr[tr.length - 1];
+    if (last.kind === "卡点") return `<span class="trail-badge block" title="最新卡点：${esc(last.text).slice(0, 60)}" onclick="openTrail(${t.seq})">🚧 卡点</span>`;
+    return `<span class="trail-badge ok" title="最新进展：${esc(last.text).slice(0, 60)}" onclick="openTrail(${t.seq})">链路 ${tr.length}</span>`;
+  };
   switch (key) {
     case "date":      return `<td>${t.date}</td>`;
     case "type":      return `<td>${typeBadge(t.type)}</td>`;
     case "customer":  return `<td class="editable" data-field="customer" title="双击编辑">${esc(t.customer) || dash}</td>`;
-    case "desc":      return `<td class="editable" data-field="desc" title="双击编辑">${nl(t.desc)}${clip("desc")}</td>`;
+    case "desc":      return `<td class="editable" data-field="desc" title="双击编辑">${nl(t.desc)}${clip("desc")}${trailMark()}</td>`;
     case "cause":     return `<td class="editable" data-field="cause" title="双击编辑">${nl(t.cause) || dash}${clip("cause")}</td>`;
     case "solution":  return `<td class="editable" data-field="solution" title="双击编辑">${nl(t.solution) || dash}${clip("solution")}</td>`;
     case "solvedDate":return `<td>${t.solvedDate ? `<span class="solved">✔ ${t.solvedDate}</span>` : dash}</td>`;
@@ -579,18 +628,19 @@ function renderTask() {
     if (fc && (t.customer || "") !== fc) return false;
     if (fh && (t.handler || "") !== fh) return false;
     if (fd && t.date !== fd) return false;
-    if (kw && ![t.desc, t.cause, t.solution, t.note, t.customer, t.handler].join(" ").toLowerCase().includes(kw)) return false;
+    if (kw && ![t.desc, t.cause, t.solution, t.note, t.customer, t.handler, ...(t.trail || []).map(e => e.text)].join(" ").toLowerCase().includes(kw)) return false;
     return true;
   });
   const vis = COLS.filter(c => visibleCols.has(c.key));
   document.getElementById("theadRow").innerHTML =
-    `<th style="width:46px">序号</th>` + vis.map(c => `<th style="${c.w}">${c.label}</th>`).join("") + `<th style="width:128px">操作</th>`;
+    `<th style="width:46px">序号</th>` + vis.map(c => `<th style="${c.w}">${c.label}</th>`).join("") + `<th style="width:158px">操作</th>`;
   const tb = document.getElementById("tbody");
   tb.innerHTML = rows.length ? rows.map(t => `
     <tr class="${statusOf(t) === "已完成" ? "" : "undone"}" data-seq="${t.seq}">
       <td class="seq">${t.seq}</td>
       ${vis.map(c => cellHtml(t, c.key)).join("")}
       <td class="actions">
+        <button class="ghost" style="padding:2px 8px;font-size:12px" onclick="openTrail(${t.seq})">链路</button>
         <button class="ghost" style="padding:2px 8px;font-size:12px" onclick="openDetail(${t.seq})">详情</button>
         <button class="ghost" style="padding:2px 8px;font-size:12px" onclick="openEdit(${t.seq})">编辑</button>
         <button class="danger-link" onclick="delTask(${t.seq})">删除</button>
@@ -599,8 +649,10 @@ function renderTask() {
     : `<tr><td colspan="${vis.length + 2}" class="empty-tip">暂无记录，点右上角「＋ 新增任务」开始</td></tr>`;
 
   const undone = tasks.filter(t => statusOf(t) !== "已完成").length;
+  const blocked = tasks.filter(t => (t.trail || []).length && t.trail[t.trail.length - 1].kind === "卡点").length;
   document.getElementById("stats").innerHTML =
-    `共 ${tasks.length} 条 · <b class="undone">未解决 ${undone}</b> · 已完成 ${tasks.length - undone}`;
+    `共 ${tasks.length} 条 · <b class="undone">未解决 ${undone}</b> · 已完成 ${tasks.length - undone}` +
+    (blocked ? ` · <b style="color:#b91c1c">🚧 卡点中 ${blocked}</b>` : "");
   fillFilter("filterCustomer", "全部客户", [...new Set(tasks.map(t => t.customer).filter(Boolean))].sort());
   fillFilter("filterHandler", "全部处理人", [...new Set(tasks.map(t => t.handler).filter(Boolean))]);
   bindInlineEdit();
@@ -1091,7 +1143,8 @@ function openDetail(seq) {
     row("解决方案", nl(t.solution) || dash) +
     attHtml("solution") +
     row("解决日期", t.solvedDate ? `<span class="solved">✔ ${esc(t.solvedDate)}</span>` : dash) +
-    row("备注", esc(t.note) || dash);
+    row("备注", esc(t.note) || dash) +
+    trailViewHtml(t);
   document.getElementById("viewMask").classList.add("show");
 }
 function renderViewAtt(list) {
@@ -1102,6 +1155,79 @@ function renderViewAtt(list) {
 }
 function closeView() { document.getElementById("viewMask").classList.remove("show"); }
 function showLightbox(src) { document.getElementById("lightboxImg").src = src; document.getElementById("lightbox").classList.add("show"); }
+
+/* ---------- 任务链路（进展 / 卡点时间线） ---------- */
+let trailSeq = null;
+const nowStamp = () => {
+  const d = new Date(), p = n => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+};
+function trailOf(t) { if (!Array.isArray(t.trail)) t.trail = []; return t.trail; }
+
+function openTrail(seq) {
+  const t = tasks.find(x => x.seq === seq);
+  if (!t) return alert("未找到该任务，请刷新页面重试");
+  trailSeq = seq;
+  document.getElementById("trailTitle").textContent = `任务链路 #${t.seq}`;
+  document.getElementById("trailHead").innerHTML =
+    `${typeBadge(t.type)} ${statusBadge(t)} · ${esc(t.customer || "无客户")} · ${esc(t.desc).slice(0, 50)}`;
+  renderTrail();
+  document.getElementById("trailText").value = "";
+  document.getElementById("trailMask").classList.add("show");
+}
+function closeTrail() { document.getElementById("trailMask").classList.remove("show"); }
+
+function renderTrail() {
+  const t = tasks.find(x => x.seq === trailSeq);
+  if (!t) return;
+  const tr = trailOf(t);
+  const list = document.getElementById("trailList");
+  list.innerHTML = tr.length ? [...tr].map((e, i) => ({ ...e, _i: i })).reverse().map(e => `
+    <div class="tl-item ${e.kind === "卡点" ? "block" : "ok"}">
+      <div class="tl-meta">
+        <span class="tl-kind ${e.kind}">${e.kind}</span>
+        <span>${esc(e.time)}</span>
+        ${e.done ? '<span style="color:#16a34a">✔ 卡点已解除</span>' : ""}
+        <span class="tl-del" onclick="delTrailEntry(${e._i})" title="删除这条记录">删除</span>
+      </div>
+      <div class="tl-text">${esc(e.text).replace(/\n/g, "<br>")}</div>
+    </div>`).join("")
+    : '<div style="color:var(--muted);font-size:13px;padding:10px 0">暂无链路记录，在下方添加第一条进展或卡点</div>';
+}
+
+function addTrailEntry() {
+  const t = tasks.find(x => x.seq === trailSeq);
+  if (!t) return;
+  const text = document.getElementById("trailText").value.trim();
+  if (!text) return alert("请输入进展或卡点说明");
+  const kind = document.getElementById("trailKind").value;
+  const tr = trailOf(t);
+  /* 新增卡点时，自动把上一条未解除的卡点标记为已解除 */
+  if (kind === "卡点") tr.forEach(e => { if (e.kind === "卡点") e.done = true; });
+  tr.push({ time: nowStamp(), kind, text });
+  /* 添加进展后若任务还标着未解决且有解决语义，不强改状态，由用户在编辑里维护 */
+  saveLocal();
+  document.getElementById("trailText").value = "";
+  renderTrail();
+  render();
+}
+
+function delTrailEntry(i) {
+  const t = tasks.find(x => x.seq === trailSeq);
+  if (!t || !confirm("删除这条链路记录？")) return;
+  trailOf(t).splice(i, 1);
+  saveLocal(); renderTrail(); render();
+}
+/* 供详情页复用的链路只读渲染 */
+function trailViewHtml(t) {
+  const tr = t.trail || [];
+  if (!tr.length) return "";
+  return `<div class="k">🔗 任务链路</div><div class="v"><div class="timeline">` + [...tr].reverse().map(e => `
+    <div class="tl-item ${e.kind === "卡点" ? "block" : "ok"}">
+      <div class="tl-meta"><span class="tl-kind ${e.kind}">${e.kind}</span><span>${esc(e.time)}</span>${e.done ? '<span style="color:#16a34a">✔ 已解除</span>' : ""}</div>
+      <div class="tl-text">${esc(e.text).replace(/\n/g, "<br>")}</div>
+    </div>`).join("") + `</div></div>`;
+}
 
 /* ---------- 附件（截图/文件，内嵌存储，随数据同步） ---------- */
 const ATT_FIELDS = ["desc", "cause", "solution"];
