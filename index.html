@@ -168,10 +168,17 @@
 <div id="pageGo" style="display:none">
   <div class="toolbar">
     <button class="primary" onclick="openGoEdit()">＋ 新增上线记录</button>
+    <select id="goFilterEnt" onchange="render()"><option value="">全部企业</option></select>
+    <select id="goFilterBank" onchange="render()"><option value="">全部银行</option></select>
     <select id="goFilterMode" onchange="render()">
       <option value="">全部直联模式</option>
     </select>
-    <input type="search" id="goKw" placeholder="搜索企业 / 银行 / 城市…" oninput="render()">
+    <input type="date" id="goFilterDate" onchange="render()" title="按上线日期筛选">
+    <select id="goFilterCity" onchange="render()"><option value="">全部城市</option></select>
+    <select id="goFilterImpl" onchange="render()"><option value="">全部实施人员</option></select>
+    <select id="goFilterMgr" onchange="render()"><option value="">全部客户经理</option></select>
+    <input type="search" id="goKw" placeholder="搜索关键词…" oninput="render()">
+    <button class="ghost" onclick="resetGoFilters()">重置筛选</button>
     <label class="ghost" style="cursor:pointer;border:1px solid var(--border);border-radius:6px;padding:6px 10px;">
       📥 导入 Excel<input type="file" accept=".xlsx,.xls" style="display:none" onchange="importGoExcel(this)">
     </label>
@@ -604,11 +611,19 @@ function goCellHtml(g, key) {
 }
 
 function renderGo() {
-  const fm = document.getElementById("goFilterMode").value;
-  const kw = document.getElementById("goKw").value.trim().toLowerCase();
+  const fv = id => document.getElementById(id).value;
+  const fEnt = fv("goFilterEnt"), fBank = fv("goFilterBank"), fm = fv("goFilterMode");
+  const fDate = fv("goFilterDate"), fCity = fv("goFilterCity"), fImpl = fv("goFilterImpl"), fMgr = fv("goFilterMgr");
+  const kw = fv("goKw").trim().toLowerCase();
   const rows = golive.filter(g => {
+    if (fEnt && g.ent !== fEnt) return false;
+    if (fBank && g.bank !== fBank) return false;
     if (fm && g.mode !== fm) return false;
-    if (kw && ![g.ent, g.bank, g.city, g.impl, g.mgr, g.mode].join(" ").toLowerCase().includes(kw)) return false;
+    if (fDate && g.date !== fDate) return false;
+    if (fCity && g.city !== fCity) return false;
+    if (fImpl && g.impl !== fImpl) return false;
+    if (fMgr && g.mgr !== fMgr) return false;
+    if (kw && ![g.ent, g.bank, g.city, g.impl, g.mgr, g.mode, g.date].join(" ").toLowerCase().includes(kw)) return false;
     return true;
   });
   document.getElementById("goTheadRow").innerHTML =
@@ -623,9 +638,23 @@ function renderGo() {
       </td>
     </tr>`).join("")
     : `<tr><td colspan="${GOCOLS.length + 2}" class="empty-tip">暂无上线记录，可「＋ 新增上线记录」或「📥 导入 Excel」历史数据</td></tr>`;
-  document.getElementById("goStats").textContent = `共 ${golive.length} 条上线记录`;
+  document.getElementById("goStats").textContent =
+    `共 ${golive.length} 条上线记录` + (rows.length !== golive.length ? `（筛选出 ${rows.length} 条）` : "");
+  const uniq = k => [...new Set(golive.map(g => g[k]).filter(Boolean))];
+  fillFilter("goFilterEnt", "全部企业", uniq("ent").sort());
+  fillFilter("goFilterBank", "全部银行", uniq("bank").sort());
   fillFilter("goFilterMode", "全部直联模式", MODES);
+  fillFilter("goFilterCity", "全部城市", uniq("city").sort());
+  fillFilter("goFilterImpl", "全部实施人员", uniq("impl"));
+  fillFilter("goFilterMgr", "全部客户经理", uniq("mgr"));
   bindInlineEdit();
+}
+
+function resetGoFilters() {
+  ["goFilterEnt", "goFilterBank", "goFilterMode", "goFilterCity", "goFilterImpl", "goFilterMgr"].forEach(id => document.getElementById(id).value = "");
+  document.getElementById("goFilterDate").value = "";
+  document.getElementById("goKw").value = "";
+  render();
 }
 
 function nextGoSeq() { return golive.reduce((m, g) => Math.max(m, g.seq), 0) + 1; }
