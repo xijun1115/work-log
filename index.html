@@ -21,7 +21,7 @@
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: "Microsoft YaHei", "PingFang SC", system-ui, sans-serif; background: var(--bg); color: var(--text); font-size: 14px; }
-  .container { max-width: 1200px; margin: 0 auto; padding: 20px 16px 60px; }
+  .container { max-width: 1500px; margin: 0 auto; padding: 20px 16px 60px; }
   header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; margin-bottom: 14px; }
   h1 { font-size: 20px; }
   .toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 12px; }
@@ -51,6 +51,8 @@
   .badge.t2 { background: #fee2e2; color: #b91c1c; }
   .badge.t3 { background: #dcfce7; color: #15803d; }
   .badge.t4 { background: #ede9fe; color: #6d28d9; }
+  .badge.done { background: #dcfce7; color: #15803d; }
+  .badge.undone { background: #fef3c7; color: #b45309; }
   .solved { color: var(--ok); white-space: nowrap; }
   .actions { white-space: nowrap; }
   .empty-tip { text-align: center; color: var(--muted); padding: 40px 0; }
@@ -87,10 +89,18 @@
     </select>
     <select id="filterStatus" onchange="render()">
       <option value="">全部状态</option>
-      <option value="undone">未解决</option>
-      <option value="solved">已解决</option>
+      <option>未解决</option>
+      <option>已完成</option>
     </select>
+    <select id="filterCustomer" onchange="render()">
+      <option value="">全部客户</option>
+    </select>
+    <select id="filterHandler" onchange="render()">
+      <option value="">全部处理人</option>
+    </select>
+    <input type="date" id="filterDate" onchange="render()" title="按提出日期筛选">
     <input type="search" id="kw" placeholder="搜索关键词…" oninput="render()">
+    <button class="ghost" onclick="resetFilters()">重置筛选</button>
     <button class="ghost" onclick="exportCsv()">导出 CSV</button>
     <button class="ghost" onclick="exportJson()">导出 JSON</button>
     <label class="ghost" style="cursor:pointer;border:1px solid var(--border);border-radius:6px;padding:6px 10px;">
@@ -111,7 +121,7 @@
         <th style="width:46px">序号</th><th style="width:100px">提出日期</th>
         <th style="width:110px">任务类型</th><th style="width:110px">客户名称</th><th style="min-width:200px">任务描述</th>
         <th style="min-width:160px">问题原因</th><th style="min-width:160px">解决方案</th>
-        <th style="width:100px">解决日期</th><th style="width:90px">处理人</th><th style="width:110px">备注</th><th style="width:90px">操作</th>
+        <th style="width:100px">解决日期</th><th style="width:76px">状态</th><th style="width:90px">处理人</th><th style="width:110px">备注</th><th style="width:90px">操作</th>
       </tr>
     </thead>
     <tbody id="tbody"></tbody>
@@ -129,7 +139,8 @@
       <div class="full"><label>任务描述 *</label><textarea id="fDesc" placeholder="做了什么 / 遇到什么问题"></textarea></div>
       <div class="full"><label>问题原因</label><textarea id="fCause"></textarea></div>
       <div class="full"><label>解决方案</label><textarea id="fSolution"></textarea></div>
-      <div><label>解决日期（留空=未解决）</label><input type="date" id="fSolved"></div>
+      <div><label>解决日期（完成后填写）</label><input type="date" id="fSolved"></div>
+      <div><label>任务状态</label><select id="fStatus"><option>未解决</option><option>已完成</option></select></div>
       <div><label>处理人</label><input type="text" id="fHandler" list="handlerList" placeholder="输入或从下拉选择"></div>
       <div class="full"><label>备注</label><input type="text" id="fNote"></div>
       <datalist id="handlerList"></datalist>
@@ -245,20 +256,40 @@ function typeBadge(t) {
 }
 function esc(s) { return String(s ?? "").replace(/[&<>"']/g, m => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m])); }
 
+/* 状态：优先取显式 status 字段，老数据按解决日期推断 */
+function statusOf(t) { return t.status || (t.solvedDate ? "已完成" : "未解决"); }
+function statusBadge(t) {
+  return statusOf(t) === "已完成"
+    ? '<span class="badge done">已完成</span>'
+    : '<span class="badge undone">未解决</span>';
+}
+
+function fillFilter(id, placeholder, values) {
+  const sel = document.getElementById(id);
+  const cur = sel.value;
+  sel.innerHTML = `<option value="">${placeholder}</option>` +
+    values.map(v => `<option${v === cur ? " selected" : ""}>${esc(v)}</option>`).join("");
+}
+
 function render() {
   const ft = document.getElementById("filterType").value;
   const fs = document.getElementById("filterStatus").value;
+  const fc = document.getElementById("filterCustomer").value;
+  const fh = document.getElementById("filterHandler").value;
+  const fd = document.getElementById("filterDate").value;
   const kw = document.getElementById("kw").value.trim().toLowerCase();
   const rows = tasks.filter(t => {
     if (ft && t.type !== ft) return false;
-    if (fs === "undone" && t.solvedDate) return false;
-    if (fs === "solved" && !t.solvedDate) return false;
+    if (fs && statusOf(t) !== fs) return false;
+    if (fc && (t.customer || "") !== fc) return false;
+    if (fh && (t.handler || "") !== fh) return false;
+    if (fd && t.date !== fd) return false;
     if (kw && ![t.desc, t.cause, t.solution, t.note, t.customer, t.handler].join(" ").toLowerCase().includes(kw)) return false;
     return true;
   });
   const tb = document.getElementById("tbody");
   tb.innerHTML = rows.length ? rows.map(t => `
-    <tr class="${t.solvedDate ? "" : "undone"}" data-seq="${t.seq}">
+    <tr class="${statusOf(t) === "已完成" ? "" : "undone"}" data-seq="${t.seq}">
       <td class="seq">${t.seq}</td>
       <td>${t.date}</td>
       <td>${typeBadge(t.type)}</td>
@@ -266,7 +297,8 @@ function render() {
       <td class="editable" data-field="desc" title="双击编辑">${esc(t.desc).replace(/\n/g, "<br>")}</td>
       <td class="editable" data-field="cause" title="双击编辑">${esc(t.cause).replace(/\n/g, "<br>") || '<span style="color:var(--muted)">—</span>'}</td>
       <td class="editable" data-field="solution" title="双击编辑">${esc(t.solution).replace(/\n/g, "<br>") || '<span style="color:var(--muted)">—</span>'}</td>
-      <td>${t.solvedDate ? `<span class="solved">✔ ${t.solvedDate}</span>` : '<span style="color:#b45309">未解决</span>'}</td>
+      <td>${t.solvedDate ? `<span class="solved">✔ ${t.solvedDate}</span>` : '<span style="color:var(--muted)">—</span>'}</td>
+      <td class="editable" data-field="status" title="双击切换状态">${statusBadge(t)}</td>
       <td class="editable" data-field="handler" title="双击编辑">${esc(t.handler) || '<span style="color:var(--muted)">—</span>'}</td>
       <td class="editable" data-field="note" title="双击编辑">${esc(t.note) || '<span style="color:var(--muted)">—</span>'}</td>
       <td class="actions">
@@ -274,14 +306,23 @@ function render() {
         <button class="danger-link" onclick="delTask(${t.seq})">删除</button>
       </td>
     </tr>`).join("")
-    : `<tr><td colspan="11" class="empty-tip">暂无记录，点右上角「＋ 新增任务」开始</td></tr>`;
+    : `<tr><td colspan="12" class="empty-tip">暂无记录，点右上角「＋ 新增任务」开始</td></tr>`;
 
-  const undone = tasks.filter(t => !t.solvedDate).length;
+  const undone = tasks.filter(t => statusOf(t) !== "已完成").length;
   document.getElementById("stats").innerHTML =
-    `共 ${tasks.length} 条 · <b class="undone">未解决 ${undone}</b> · 已解决 ${tasks.length - undone}`;
+    `共 ${tasks.length} 条 · <b class="undone">未解决 ${undone}</b> · 已完成 ${tasks.length - undone}`;
+  fillFilter("filterCustomer", "全部客户", [...new Set(tasks.map(t => t.customer).filter(Boolean))].sort());
+  fillFilter("filterHandler", "全部处理人", [...new Set(tasks.map(t => t.handler).filter(Boolean))]);
   bindInlineEdit();
   refreshCustomerList();
   refreshHandlerList();
+}
+
+function resetFilters() {
+  ["filterType", "filterStatus", "filterCustomer", "filterHandler"].forEach(id => document.getElementById(id).value = "");
+  document.getElementById("filterDate").value = "";
+  document.getElementById("kw").value = "";
+  render();
 }
 
 function refreshHandlerList() {
@@ -303,6 +344,15 @@ function bindInlineEdit() {
       const seq = +td.closest("tr").dataset.seq;
       const field = td.dataset.field;
       const task = tasks.find(t => t.seq === seq);
+      /* 状态列特殊处理：双击直接切换 */
+      if (field === "status") {
+        const ns = statusOf(task) === "已完成" ? "未解决" : "已完成";
+        task.status = ns;
+        if (ns === "已完成" && !task.solvedDate) task.solvedDate = new Date().toISOString().slice(0, 10);
+        if (ns === "未解决") task.solvedDate = "";
+        saveLocal(); render();
+        return;
+      }
       const old = task[field] || "";
       td.innerHTML = `<textarea class="inline-input" rows="${Math.max(2, old.split("\n").length)}">${esc(old)}</textarea>`;
       const ta = td.querySelector("textarea");
@@ -334,6 +384,7 @@ function openEdit(seq) {
   document.getElementById("fCause").value = t?.cause || "";
   document.getElementById("fSolution").value = t?.solution || "";
   document.getElementById("fSolved").value = t?.solvedDate || "";
+  document.getElementById("fStatus").value = statusOf(t);
   document.getElementById("fHandler").value = t?.handler || "";
   document.getElementById("fNote").value = t?.note || "";
   document.getElementById("editMask").classList.add("show");
@@ -346,13 +397,19 @@ function saveEdit() {
   if (type === "__other") type = prompt("输入自定义任务类型：") || "";
   const desc = document.getElementById("fDesc").value.trim();
   if (!date || !type || !desc) return alert("提出日期、任务类型、任务描述为必填项");
+  let solvedDate = document.getElementById("fSolved").value || "";
+  let status = document.getElementById("fStatus").value;
+  if (solvedDate && status !== "已完成") status = "已完成";   /* 填了解决日期视为已完成 */
+  if (status === "已完成" && !solvedDate) solvedDate = new Date().toISOString().slice(0, 10);
+  if (status === "未解决") solvedDate = "";
   const data = {
     date, type,
     customer: document.getElementById("fCustomer").value.trim(),
     desc,
     cause: document.getElementById("fCause").value.trim(),
     solution: document.getElementById("fSolution").value.trim(),
-    solvedDate: document.getElementById("fSolved").value || "",
+    solvedDate,
+    status,
     handler: document.getElementById("fHandler").value.trim(),
     note: document.getElementById("fNote").value.trim(),
   };
@@ -401,9 +458,9 @@ function download(name, content, mime) {
   a.download = name; a.click(); URL.revokeObjectURL(a.href);
 }
 function exportCsv() {
-  const head = ["序号", "任务提出日期", "任务类型", "客户名称", "任务描述", "问题原因", "解决方案", "解决日期", "处理人", "备注"];
+  const head = ["序号", "任务提出日期", "任务类型", "客户名称", "任务描述", "问题原因", "解决方案", "解决日期", "任务状态", "处理人", "备注"];
   const lines = [head];
-  tasks.forEach(t => lines.push([t.seq, t.date, t.type, t.customer, t.desc, t.cause, t.solution, t.solvedDate, t.handler, t.note]));
+  tasks.forEach(t => lines.push([t.seq, t.date, t.type, t.customer, t.desc, t.cause, t.solution, t.solvedDate, statusOf(t), t.handler, t.note]));
   const csv = "\uFEFF" + lines.map(r => r.map(v => `"${String(v ?? "").replace(/"/g, '""')}"`).join(",")).join("\r\n");
   download(`工作任务记录_${new Date().toISOString().slice(0, 10)}.csv`, csv, "text/csv;charset=utf-8");
 }
