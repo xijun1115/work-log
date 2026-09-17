@@ -606,7 +606,7 @@
 </div>
 
 <script>
-const TYPES = ["云跨行上线", "生产问题", "业务需求", "他行直联测试", "他行直联上线", "ERP测试", "ERP生产"];
+const TYPES = ["云跨行上线", "生产运维", "业务需求", "他行直联测试", "他行直联上线", "ERP测试", "ERP生产"];
 const CUSTOMER_PRESETS = ["吉邦精密", "中铁二十五局", "金发科技", "广晟财司", "广州农商行", "香山电子", "曼秀雷敦", "惠州大亚湾水务", "广州数科", "安保集团", "珠海交控", "广省智协", "广东太力", "佐登妮丝", "信银理财", "珠光汽车", "清远国投", "六盯目"];
 const LS_KEY = "worklog_tasks_v1";
 const LS_CFG = "worklog_gh_cfg_v1";
@@ -672,12 +672,15 @@ function saveCols() { localStorage.setItem(LS_COLS, JSON.stringify([...visibleCo
 
 /* ---------- 存取 ---------- */
 function loadLocal() {
-  try { tasks = JSON.parse(localStorage.getItem(LS_KEY)) || []; } catch { tasks = []; }
+  const rawTasks = localStorage.getItem(LS_KEY);
+  try { tasks = JSON.parse(rawTasks) || []; } catch { tasks = []; }
   try { golive = JSON.parse(localStorage.getItem(GO_KEY)) || []; } catch { golive = []; }
   try { kb = JSON.parse(localStorage.getItem(KB_KEY)) || []; } catch { kb = []; }
   /* 迁移修复：Excel 导入的历史数据序号可能是文本或重复的，统一成数字；重复则重排
      注意：顺序沿用数组现有顺序（用户拖动排序的结果），不能按 seq 重排 */
   tasks.forEach(t => { if (typeof t.seq !== "number" || isNaN(t.seq)) t.seq = parseInt(t.seq) || 0; });
+  /* 类型更名迁移：生产问题 → 生产运维 */
+  tasks.forEach(t => { if (t.type === "生产问题") t.type = "生产运维"; });
   /* 自愈：状态与解决日期矛盾时以 status 为准（避免「未解决」被旧日期顶回「已完成」） */
   tasks.forEach(t => {
     if (t.status === "未解决" && t.solvedDate) t.solvedDate = "";
@@ -689,6 +692,8 @@ function loadLocal() {
     if (!g.seq || seen.has(g.seq)) g.seq = (golive.reduce((m, x) => Math.max(m, x.seq), 0) || 0) + 1;
     seen.add(g.seq);
   });
+  /* 迁移后的数据若与原来不同，立即落盘（否则本地存储里还留着旧值） */
+  if (rawTasks !== JSON.stringify(tasks)) saveLocal();
 }
 function saveLocal() {
   /* 每个 key 独立 try/catch：一个写失败（如配额超限）不能拖垮其它数据 */
