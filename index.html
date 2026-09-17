@@ -75,6 +75,26 @@
   textarea { resize: vertical; min-height: 60px; }
   .modal-foot { display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; }
   .hint { font-size: 12px; color: var(--muted); margin-top: 4px; }
+  /* 附件 */
+  .att-row { margin-top: 6px; }
+  .att-add { padding: 3px 10px; font-size: 12px; }
+  .att-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+  .att-chip { display: flex; align-items: center; gap: 6px; border: 1px solid var(--border); border-radius: 6px; padding: 3px 8px; font-size: 12px; background: var(--bg); max-width: 260px; }
+  .att-chip img { width: 36px; height: 28px; object-fit: cover; border-radius: 3px; cursor: zoom-in; }
+  .att-chip .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 150px; }
+  .att-chip a { color: var(--primary); text-decoration: none; }
+  .att-chip .rm { cursor: pointer; color: var(--danger); padding: 0 2px; border: none; background: none; font-size: 13px; }
+  .paperclip { color: var(--primary); cursor: pointer; font-size: 12px; margin-left: 6px; white-space: nowrap; }
+  /* 详情弹窗 */
+  .view-grid { display: grid; grid-template-columns: 96px 1fr; gap: 8px 12px; font-size: 13px; }
+  .view-grid .k { color: var(--muted); white-space: nowrap; }
+  .view-grid .v { white-space: pre-wrap; word-break: break-word; }
+  .view-att { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+  .view-att img { width: 110px; height: 84px; object-fit: cover; border-radius: 6px; border: 1px solid var(--border); cursor: zoom-in; }
+  /* 图片大图预览 */
+  #lightbox { display: none; position: fixed; inset: 0; z-index: 20; background: rgba(0,0,0,.82); align-items: center; justify-content: center; cursor: zoom-out; }
+  #lightbox.show { display: flex; }
+  #lightbox img { max-width: 92vw; max-height: 92vh; border-radius: 6px; }
   .sync-bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 10px 0 4px; font-size: 13px; color: var(--muted); }
   .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); display: inline-block; }
   .dot.ok { background: var(--ok); } .dot.err { background: var(--danger); }
@@ -142,9 +162,15 @@
       <div><label>任务提出日期 *</label><input type="date" id="fDate"></div>
       <div><label>任务类型 *</label><select id="fType"></select></div>
       <div class="full"><label>客户名称</label><input type="text" id="fCustomer" list="customerList" placeholder="输入或从下拉选择（双击表格也可改）"><datalist id="customerList"></datalist></div>
-      <div class="full"><label>任务描述 *</label><textarea id="fDesc" placeholder="做了什么 / 遇到什么问题"></textarea></div>
-      <div class="full"><label>问题原因</label><textarea id="fCause"></textarea></div>
-      <div class="full"><label>解决方案</label><textarea id="fSolution"></textarea></div>
+      <div class="full"><label>任务描述 *</label><textarea id="fDesc" placeholder="做了什么 / 遇到什么问题"></textarea>
+        <div class="att-row" data-att="desc"><button type="button" class="ghost att-add" onclick="pickAtt('desc')">📎 添加截图/文件</button><input type="file" id="attFile-desc" multiple style="display:none" onchange="addAtt('desc', this)"><div class="att-list" id="attList-desc"></div></div>
+      </div>
+      <div class="full"><label>问题原因</label><textarea id="fCause"></textarea>
+        <div class="att-row" data-att="cause"><button type="button" class="ghost att-add" onclick="pickAtt('cause')">📎 添加截图/文件</button><input type="file" id="attFile-cause" multiple style="display:none" onchange="addAtt('cause', this)"><div class="att-list" id="attList-cause"></div></div>
+      </div>
+      <div class="full"><label>解决方案</label><textarea id="fSolution"></textarea>
+        <div class="att-row" data-att="solution"><button type="button" class="ghost att-add" onclick="pickAtt('solution')">📎 添加截图/文件</button><input type="file" id="attFile-solution" multiple style="display:none" onchange="addAtt('solution', this)"><div class="att-list" id="attList-solution"></div></div>
+      </div>
       <div><label>解决日期（完成后填写）</label><input type="date" id="fSolved"></div>
       <div><label>任务状态</label><select id="fStatus"><option>未解决</option><option>已完成</option></select></div>
       <div><label>处理人</label><input type="text" id="fHandler" list="handlerList" placeholder="输入或从下拉选择"></div>
@@ -157,6 +183,21 @@
     </div>
   </div>
 </div>
+
+<!-- 详情 模态框 -->
+<div class="mask" id="viewMask">
+  <div class="modal">
+    <h2 id="viewTitle">任务详情</h2>
+    <div class="view-grid" id="viewBody"></div>
+    <div class="modal-foot">
+      <button onclick="closeView()">关闭</button>
+      <button class="primary" id="viewEditBtn" onclick="closeView(); openEdit(viewingSeq)">编辑这条</button>
+    </div>
+  </div>
+</div>
+
+<!-- 图片大图预览 -->
+<div id="lightbox" onclick="this.classList.remove('show')"><img id="lightboxImg" alt=""></div>
 
 <!-- 设置 模态框 -->
 <div class="mask" id="setMask">
@@ -244,11 +285,19 @@ async function pullFromGitHub() {
   if (!c.repo || !c.token) return alert("请先在「设置」里配置仓库和 Token");
   setSync("", "正在从 GitHub 拉取…");
   try {
-    const r = await fetch(ghUrl() + "?ref=" + encodeURIComponent(c.branch || "main"), { headers: ghHeaders() });
+    let r = await fetch(ghUrl() + "?ref=" + encodeURIComponent(c.branch || "main"), { headers: ghHeaders() });
     if (r.status === 404) { setSync("ok", "GitHub 上还没有数据文件，将创建新文件"); return; }
-    if (!r.ok) throw new Error("HTTP " + r.status);
-    const j = await r.json();
-    const remote = JSON.parse(b64decode(j.content));
+    if (!r.ok) {
+      // 文件超过 1MB 时 Contents API 会拒绝，改用 raw 模式直接取内容
+      r = await fetch(ghUrl() + "?ref=" + encodeURIComponent(c.branch || "main"),
+        { headers: { ...ghHeaders(), "Accept": "application/vnd.github.raw" } });
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      const text = await r.text();
+      var remote = JSON.parse(text);
+    } else {
+      const j = await r.json();
+      var remote = JSON.parse(b64decode(j.content));
+    }
     // 简单合并：按 seq 去重，本地没有的补进来
     const seqs = new Set(tasks.map(t => t.seq));
     let added = 0;
@@ -302,16 +351,18 @@ function fillFilter(id, placeholder, values) {
 }
 
 /* 单元格渲染器：按列 key 输出 td */
+const ATT_MARK = f => `<span class="paperclip" title="含附件">📎</span>`;
 function cellHtml(t, key) {
   const dash = '<span style="color:var(--muted)">—</span>';
   const nl = s => esc(s).replace(/\n/g, "<br>");
+  const clip = f => (t.att?.[f] || []).length ? ATT_MARK(f) : "";
   switch (key) {
     case "date":      return `<td>${t.date}</td>`;
     case "type":      return `<td>${typeBadge(t.type)}</td>`;
     case "customer":  return `<td class="editable" data-field="customer" title="双击编辑">${esc(t.customer) || dash}</td>`;
-    case "desc":      return `<td class="editable" data-field="desc" title="双击编辑">${nl(t.desc)}</td>`;
-    case "cause":     return `<td class="editable" data-field="cause" title="双击编辑">${nl(t.cause) || dash}</td>`;
-    case "solution":  return `<td class="editable" data-field="solution" title="双击编辑">${nl(t.solution) || dash}</td>`;
+    case "desc":      return `<td class="editable" data-field="desc" title="双击编辑">${nl(t.desc)}${clip("desc")}</td>`;
+    case "cause":     return `<td class="editable" data-field="cause" title="双击编辑">${nl(t.cause) || dash}${clip("cause")}</td>`;
+    case "solution":  return `<td class="editable" data-field="solution" title="双击编辑">${nl(t.solution) || dash}${clip("solution")}</td>`;
     case "solvedDate":return `<td>${t.solvedDate ? `<span class="solved">✔ ${t.solvedDate}</span>` : dash}</td>`;
     case "status":    return `<td class="editable" data-field="status" title="双击切换状态">${statusBadge(t)}</td>`;
     case "handler":   return `<td class="editable" data-field="handler" title="双击编辑">${esc(t.handler) || dash}</td>`;
@@ -349,13 +400,14 @@ function render() {
   });
   const vis = COLS.filter(c => visibleCols.has(c.key));
   document.getElementById("theadRow").innerHTML =
-    `<th style="width:46px">序号</th>` + vis.map(c => `<th style="${c.w}">${c.label}</th>`).join("") + `<th style="width:90px">操作</th>`;
+    `<th style="width:46px">序号</th>` + vis.map(c => `<th style="${c.w}">${c.label}</th>`).join("") + `<th style="width:128px">操作</th>`;
   const tb = document.getElementById("tbody");
   tb.innerHTML = rows.length ? rows.map(t => `
     <tr class="${statusOf(t) === "已完成" ? "" : "undone"}" data-seq="${t.seq}">
       <td class="seq">${t.seq}</td>
       ${vis.map(c => cellHtml(t, c.key)).join("")}
       <td class="actions">
+        <button class="ghost" style="padding:2px 8px;font-size:12px" onclick="openDetail(${t.seq})">详情</button>
         <button class="ghost" style="padding:2px 8px;font-size:12px" onclick="openEdit(${t.seq})">编辑</button>
         <button class="danger-link" onclick="delTask(${t.seq})">删除</button>
       </td>
@@ -441,6 +493,12 @@ function openEdit(seq) {
   document.getElementById("fStatus").value = statusOf(t);
   document.getElementById("fHandler").value = t?.handler || "";
   document.getElementById("fNote").value = t?.note || "";
+  editAtt = {
+    desc: [...(t?.att?.desc || [])],
+    cause: [...(t?.att?.cause || [])],
+    solution: [...(t?.att?.solution || [])],
+  };
+  renderAttLists();
   document.getElementById("editMask").classList.add("show");
 }
 function closeEdit() { document.getElementById("editMask").classList.remove("show"); }
@@ -464,6 +522,7 @@ function saveEdit() {
     solution: document.getElementById("fSolution").value.trim(),
     solvedDate,
     status,
+    att: editAtt,
     handler: document.getElementById("fHandler").value.trim(),
     note: document.getElementById("fNote").value.trim(),
   };
@@ -482,6 +541,114 @@ function delTask(seq) {
   if (!confirm(`确定删除任务 #${seq}？\n${t.desc.slice(0, 40)}…`)) return;
   tasks = tasks.filter(x => x.seq !== seq);
   saveLocal(); render();
+}
+
+/* ---------- 详情查看 ---------- */
+let viewingSeq = null;
+function openDetail(seq) {
+  const t = tasks.find(x => x.seq === seq);
+  if (!t) return;
+  viewingSeq = seq;
+  document.getElementById("viewTitle").textContent = `任务详情 #${t.seq}`;
+  const dash = '<span style="color:var(--muted)">—</span>';
+  const row = (k, v) => v ? `<div class="k">${k}</div><div class="v">${v}</div>` : "";
+  const nl = s => esc(s).replace(/\n/g, "<br>");
+  const attHtml = f => (t.att?.[f] || []).length ? `
+    <div class="k">📎 附件</div><div class="v"><div class="view-att">${renderViewAtt(t.att[f])}</div></div>` : "";
+  document.getElementById("viewBody").innerHTML =
+    row("序号", t.seq) +
+    row("提出日期", esc(t.date)) +
+    row("任务类型", typeBadge(t.type)) +
+    row("任务状态", statusBadge(t)) +
+    row("客户名称", esc(t.customer) || dash) +
+    row("处理人", esc(t.handler) || dash) +
+    row("任务描述", nl(t.desc)) +
+    attHtml("desc") +
+    row("问题原因", nl(t.cause) || dash) +
+    attHtml("cause") +
+    row("解决方案", nl(t.solution) || dash) +
+    attHtml("solution") +
+    row("解决日期", t.solvedDate ? `<span class="solved">✔ ${esc(t.solvedDate)}</span>` : dash) +
+    row("备注", esc(t.note) || dash);
+  document.getElementById("viewMask").classList.add("show");
+}
+function renderViewAtt(list) {
+  return list.map((a, i) => a.mime && a.mime.startsWith("image/")
+    ? `<img src="${a.data}" title="${esc(a.name)}" onclick="showLightbox(this.src)">`
+    : `<span class="att-chip"><a href="${a.data}" download="${esc(a.name)}">📄 ${esc(a.name)}</a></span>`
+  ).join("");
+}
+function closeView() { document.getElementById("viewMask").classList.remove("show"); }
+function showLightbox(src) { document.getElementById("lightboxImg").src = src; document.getElementById("lightbox").classList.add("show"); }
+
+/* ---------- 附件（截图/文件，内嵌存储，随数据同步） ---------- */
+const ATT_FIELDS = ["desc", "cause", "solution"];
+const ATT_MAX = 600 * 1024;  // 单个文件上限 600KB（截图压缩后一般 100~200KB）
+let editAtt = { desc: [], cause: [], solution: [] };
+
+function pickAtt(field) { document.getElementById("attFile-" + field).click(); }
+
+function addAtt(field, input) {
+  const files = [...input.files];
+  input.value = "";
+  files.forEach(async f => {
+    try {
+      let data;
+      if (f.type.startsWith("image/")) {
+        data = await compressImage(f);
+      } else {
+        if (f.size > ATT_MAX) return alert(`「${f.name}」超过 600KB，已跳过（截图会自动压缩，非图片文件请控制在 600KB 内）`);
+        data = await new Promise((res, rej) => {
+          const r = new FileReader();
+          r.onload = () => res(r.result); r.onerror = rej;
+          r.readAsDataURL(f);
+        });
+      }
+      if (data.length > ATT_MAX * 1.4) return alert(`「${f.name}」压缩后仍较大，已跳过`);
+      editAtt[field].push({ name: f.name, mime: f.type || "application/octet-stream", data });
+      renderAttLists();
+    } catch { alert(`「${f.name}」读取失败，已跳过`); }
+  });
+}
+
+/* 截图压缩：长边压到 1200px，JPEG 质量 0.65；小图保持原样 */
+function compressImage(file) {
+  return new Promise((res, rej) => {
+    if (file.size < 80 * 1024) {  // 小于 80KB 直接原样存（保留 PNG 透明度）
+      const r = new FileReader();
+      r.onload = () => res(r.result); r.onerror = rej;
+      r.readAsDataURL(file);
+      return;
+    }
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      const max = 1200;
+      let w = img.width, h = img.height;
+      if (w > max) { h = Math.round(h * max / w); w = max; }
+      const cv = document.createElement("canvas");
+      cv.width = w; cv.height = h;
+      cv.getContext("2d").drawImage(img, 0, 0, w, h);
+      const out = cv.toDataURL("image/jpeg", 0.65);
+      URL.revokeObjectURL(url);
+      res(out);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); rej(); };
+    img.src = url;
+  });
+}
+
+function removeAtt(field, idx) { editAtt[field].splice(idx, 1); renderAttLists(); }
+
+function renderAttLists() {
+  ATT_FIELDS.forEach(f => {
+    document.getElementById("attList-" + f).innerHTML = editAtt[f].map((a, i) => `
+      <span class="att-chip">
+        ${a.mime.startsWith("image/") ? `<img src="${a.data}" onclick="showLightbox(this.src)">` : "📄"}
+        <span class="name" title="${esc(a.name)}">${esc(a.name)}</span>
+        <button type="button" class="rm" onclick="removeAtt('${f}', ${i})" title="移除">✕</button>
+      </span>`).join("");
+  });
 }
 
 /* ---------- 设置 ---------- */
