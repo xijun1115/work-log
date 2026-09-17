@@ -1116,7 +1116,7 @@ function delGo(seq) {
   const g = golive.find(x => x.seq === seq) || golive.find(x => String(x.seq) === String(seq));
   if (!g) return;
   if (!confirm(`确定删除上线记录 #${g.seq}？\n${g.ent}${g.bank ? " · " + g.bank : ""}`)) return;
-  golive = golive.filter(x => x !== g);
+  golive = golive.filter(x => String(x.seq) !== String(g.seq));
   saveLocal(); render();
 }
 
@@ -1316,9 +1316,10 @@ function saveKbEdit() {
 }
 
 function delKb(seq) {
-  const g = kb.find(x => x.seq === seq);
-  if (!confirm(`确定删除知识条目 #${seq}？\n${g.title.slice(0, 40)}`)) return;
-  kb = kb.filter(x => x.seq !== seq);
+  const g = kb.find(x => x.seq === seq) || kb.find(x => String(x.seq) === String(seq));
+  if (!g) return alert("未找到该条目，请刷新页面后重试");
+  if (!confirm(`确定删除知识条目 #${g.seq}？\n${(g.title || "").slice(0, 40)}`)) return;
+  kb = kb.filter(x => String(x.seq) !== String(g.seq));
   saveLocal(); render();
 }
 
@@ -1473,9 +1474,11 @@ function saveEdit() {
 }
 
 function delTask(seq) {
-  const t = tasks.find(x => x.seq === seq);
-  if (!confirm(`确定删除任务 #${seq}？\n${t.desc.slice(0, 40)}…`)) return;
-  tasks = tasks.filter(x => x.seq !== seq);
+  const t = tasks.find(x => x.seq === seq) || tasks.find(x => String(x.seq) === String(seq));
+  if (!t) return alert("未找到该记录，请刷新页面后重试");
+  if (!confirm(`确定删除任务 #${t.seq}？\n${(t.desc || "").slice(0, 40)}…`)) return;
+  /* 用字符串比较，避免 seq 是文本型时删不掉 */
+  tasks = tasks.filter(x => String(x.seq) !== String(t.seq));
   saveLocal(); render();
 }
 
