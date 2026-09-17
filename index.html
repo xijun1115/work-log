@@ -139,6 +139,13 @@
   }
   #filterCustomer, #goFilterEnt { width: 196px; }
   #goFilterBank { width: 138px; }
+  /* 可输入筛选框旁的「清空」小按钮：有内容时才出现 */
+  .combo { display: inline-flex; align-items: center; gap: 3px; }
+  .combo-clear { display: none; width: 24px; padding: 6px 0; text-align: center; line-height: 1; font-size: 16px; color: var(--muted); }
+  .combo-clear:hover { color: var(--text); border-color: var(--border-strong); }
+  .combo.has-value .combo-clear { display: inline-block; }
+  /* 出错提示条：万一脚本抛异常，让人看到原因而不是误以为数据丢了 */
+  .fatal-bar { display: none; margin-bottom: 12px; padding: 10px 14px; border-radius: var(--radius); background: #fee2e2; color: #991b1b; font-size: 13px; }
   .stats { color: var(--muted); font-size: 13px; margin-left: auto; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
   .stats b { color: var(--text); font-weight: 600; }
   .stats b.undone { color: #c2410c; }
@@ -332,6 +339,8 @@
     <button class="ghost" onclick="openSettings()">⚙ 设置</button>
   </header>
 
+  <div id="fatalBar" class="fatal-bar"></div>
+
   <div id="pageTask">
   <div class="toolbar">
     <button class="primary" onclick="openEdit()">＋ 新增任务</button>
@@ -343,8 +352,11 @@
       <option>未解决</option>
       <option>已完成</option>
     </select>
-    <input type="text" id="filterCustomer" list="filterCustomerList" placeholder="全部客户"
-           autocomplete="off" oninput="render()" title="可下拉选择，也可手动输入，支持模糊匹配">
+    <span class="combo">
+      <input type="text" id="filterCustomer" list="filterCustomerList" placeholder="全部客户"
+             autocomplete="off" oninput="render()" title="可下拉选择，也可手动输入，支持模糊匹配">
+      <button class="combo-clear" data-clear="filterCustomer" title="清空此筛选">×</button>
+    </span>
     <datalist id="filterCustomerList"></datalist>
     <select id="filterHandler" onchange="render()">
       <option value="">全部处理人</option>
@@ -381,11 +393,17 @@
 <div id="pageGo" style="display:none">
   <div class="toolbar">
     <button class="primary" onclick="openGoEdit()">＋ 新增上线记录</button>
-    <input type="text" id="goFilterEnt" list="goFilterEntList" placeholder="全部企业"
-           autocomplete="off" oninput="render()" title="可下拉选择，也可手动输入，支持模糊匹配">
+    <span class="combo">
+      <input type="text" id="goFilterEnt" list="goFilterEntList" placeholder="全部企业"
+             autocomplete="off" oninput="render()" title="可下拉选择，也可手动输入，支持模糊匹配">
+      <button class="combo-clear" data-clear="goFilterEnt" title="清空此筛选">×</button>
+    </span>
     <datalist id="goFilterEntList"></datalist>
-    <input type="text" id="goFilterBank" list="goFilterBankList" placeholder="全部银行"
-           autocomplete="off" oninput="render()" title="可下拉选择，也可手动输入，支持模糊匹配">
+    <span class="combo">
+      <input type="text" id="goFilterBank" list="goFilterBankList" placeholder="全部银行"
+             autocomplete="off" oninput="render()" title="可下拉选择，也可手动输入，支持模糊匹配">
+      <button class="combo-clear" data-clear="goFilterBank" title="清空此筛选">×</button>
+    </span>
     <datalist id="goFilterBankList"></datalist>
     <select id="goFilterMode" onchange="render()">
       <option value="">全部直联模式</option>
@@ -841,7 +859,17 @@ function toggleCol(key, show) {
   saveCols(); render(); buildColMenu();
 }
 
-function render() { page === "task" ? renderTask() : page === "go" ? renderGo() : renderKb(); }
+function render() {
+  page === "task" ? renderTask() : page === "go" ? renderGo() : renderKb();
+  syncCombos();
+}
+/* 只有填了内容的筛选框才显示「×」清空按钮 */
+function syncCombos() {
+  document.querySelectorAll(".combo input").forEach(inp => {
+    const box = inp.closest(".combo");
+    if (box) box.classList.toggle("has-value", !!inp.value);
+  });
+}
 
 function renderTask() {
   const ft = document.getElementById("filterType").value;
@@ -874,13 +902,18 @@ function renderTask() {
         <button class="danger-link" onclick="delTask(${t.seq})">删除</button>
       </td>
     </tr>`).join("")
-    : `<tr><td colspan="${vis.length + 2}" class="empty-tip">暂无记录，点右上角「＋ 新增任务」开始</td></tr>`;
+    : `<tr><td colspan="${vis.length + 2}" class="empty-tip">${
+        tasks.length
+          ? `🔍 没有符合当前筛选条件的记录（共 ${tasks.length} 条被筛掉了，数据还在）<br><button class="ghost" style="margin-top:10px" onclick="resetFilters()">清空筛选条件</button>`
+          : `暂无记录，点右上角「＋ 新增任务」开始`
+      }</td></tr>`;
 
   const undone = tasks.filter(t => statusOf(t) !== "已完成").length;
   const blocked = tasks.filter(t => (t.trail || []).length && t.trail[t.trail.length - 1].kind === "卡点").length;
   document.getElementById("stats").innerHTML =
     `共 ${tasks.length} 条 · <b class="undone">未解决 ${undone}</b> · 已完成 ${tasks.length - undone}` +
-    (blocked ? ` · <b style="color:#b91c1c">🚧 卡点中 ${blocked}</b>` : "");
+    (blocked ? ` · <b style="color:#b91c1c">🚧 卡点中 ${blocked}</b>` : "") +
+    (rows.length !== tasks.length ? ` · <b style="color:var(--primary)">🔍 筛选出 ${rows.length} 条</b>` : "");
   fillFilter("filterCustomer", "全部客户", [...new Set(tasks.map(t => t.customer).filter(Boolean))].sort());
   fillFilter("filterHandler", "全部处理人", [...new Set(tasks.map(t => t.handler).filter(Boolean))]);
   bindInlineEdit();
@@ -937,7 +970,11 @@ function renderGo() {
         <button class="danger-link" onclick="delGo(${g.seq})">删除</button>
       </td>
     </tr>`).join("")
-    : `<tr><td colspan="${GOCOLS.length + 2}" class="empty-tip">暂无上线记录，可「＋ 新增上线记录」或「📥 导入 Excel」历史数据</td></tr>`;
+    : `<tr><td colspan="${GOCOLS.length + 2}" class="empty-tip">${
+        golive.length
+          ? `🔍 没有符合当前筛选条件的记录（共 ${golive.length} 条被筛掉了，数据还在）<br><button class="ghost" style="margin-top:10px" onclick="resetGoFilters()">清空筛选条件</button>`
+          : `暂无上线记录，可「＋ 新增上线记录」或「📥 导入 Excel」历史数据`
+      }</td></tr>`;
   document.getElementById("goStats").textContent =
     `共 ${golive.length} 条上线记录` + (rows.length !== golive.length ? `（筛选出 ${rows.length} 条）` : "") +
     (noFilter && golive.length > 1 ? " · 可拖动行或点 ↑↓ 调整顺序" : "");
@@ -949,6 +986,12 @@ function renderGo() {
   fillFilter("goFilterImpl", "全部实施人员", uniq("impl"));
   fillFilter("goFilterMgr", "全部客户经理", uniq("mgr"));
   bindInlineEdit();
+}
+
+function resetKbFilters() {
+  document.getElementById("kbFilterCat").value = "";
+  document.getElementById("kbKw").value = "";
+  render();
 }
 
 function resetGoFilters() {
@@ -1219,7 +1262,11 @@ function renderKb() {
         <button class="danger-link" onclick="delKb(${g.seq})">删除</button>
       </td>
     </tr>`).join("")
-    : `<tr><td colspan="${KBCOLS.length + 2}" class="empty-tip">暂无知识条目，点「＋ 新增知识条目」沉淀第一条</td></tr>`;
+    : `<tr><td colspan="${KBCOLS.length + 2}" class="empty-tip">${
+        kb.length
+          ? `🔍 没有符合当前筛选条件的条目（共 ${kb.length} 条被筛掉了，数据还在）<br><button class="ghost" style="margin-top:10px" onclick="resetKbFilters()">清空筛选条件</button>`
+          : `暂无知识条目，点「＋ 新增知识条目」沉淀第一条`
+      }</td></tr>`;
   const faq = kb.filter(g => g.cat === "云跨行FAQ").length;
   document.getElementById("kbStats").textContent = `共 ${kb.length} 条 · 云跨行FAQ ${faq} · ERP对接 ${kb.length - faq}`;
   bindInlineEdit();
@@ -1654,6 +1701,16 @@ function importJson(input) {
   input.value = "";
 }
 
+/* ---------- 出错兜底：脚本异常直接显示出来，避免看起来像"数据丢了" ---------- */
+function showFatal(msg) {
+  const b = document.getElementById("fatalBar");
+  if (!b) return;
+  b.style.display = "block";
+  b.textContent = "⚠ 页面脚本出错：" + msg + "　（数据仍保存在本机，刷新页面即可恢复）";
+}
+window.addEventListener("error", e => showFatal(e.message || String(e.error)));
+window.addEventListener("unhandledrejection", e => showFatal((e.reason && e.reason.message) || String(e.reason)));
+
 /* ---------- init ---------- */
 (function init() {
   loadLocal();
@@ -1661,6 +1718,10 @@ function importJson(input) {
   buildColMenu();
   const ft = document.getElementById("filterType");
   ft.innerHTML = `<option value="">全部类型</option>` + TYPES.map(t => `<option>${t}</option>`).join("");
+  /* 每次打开都从"未筛选"开始：浏览器有时会把上次的输入值还原回来，导致一进来就像数据没了 */
+  ["filterType", "filterStatus", "filterCustomer", "filterHandler", "filterDate", "kw",
+   "goFilterEnt", "goFilterBank", "goFilterMode", "goFilterCity", "goFilterImpl", "goFilterMgr", "goFilterDate", "goKw",
+   "kbFilterCat", "kbKw"].forEach(id => { const el = document.getElementById(id); if (el) el.value = ""; });
   const c = cfg();
   if (c.repo && c.token) {
     setSync("", "已配置 GitHub，正在自动同步…");
@@ -1672,6 +1733,11 @@ function importJson(input) {
   document.addEventListener("click", e => {
     const d = document.getElementById("colPick");
     if (d.open && !d.contains(e.target)) d.open = false;   /* 点外面关闭列设置 */
+    const cc = e.target.closest && e.target.closest(".combo-clear");   /* 筛选框旁的 × */
+    if (cc) {
+      const el = document.getElementById(cc.dataset.clear);
+      if (el) { el.value = ""; el.focus(); render(); }
+    }
   });
   render();
 })();
