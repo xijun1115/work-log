@@ -4,3 +4,6 @@ _ls_dump.json
 scan_ls.py
 dump_ls.js
 site/
+_cfg_recovered.json
+recover_cfg.js
+_ls_copy/
