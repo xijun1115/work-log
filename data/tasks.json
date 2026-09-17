@@ -1,95 +1,135 @@
 [
- {
-  "seq": 1,
-  "date": "2026-09-15",
-  "type": "他行直联测试",
-  "customer": "珠海农控",
-  "desc": "民生银行直联测试",
-  "cause": "",
-  "solution": "",
-  "solvedDate": "",
-  "handler": "蔡宏裕",
-  "note": "",
-  "trail": []
- },
- {
-  "seq": 2,
-  "date": "2026-09-15",
-  "type": "他行直联测试",
-  "customer": "珠海交控",
-  "desc": "招商银行直联测试",
-  "cause": "",
-  "solution": "",
-  "solvedDate": "",
-  "handler": "李金文",
-  "note": "",
-  "trail": [
-   {
-    "time": "2026-09-17 11:28",
-    "kind": "进展",
-    "text": "待总行开通访问招行的网络"
-   }
-  ]
- },
- {
-  "seq": 3,
-  "date": "2026-09-17",
-  "type": "他行直联上线",
-  "customer": "（极海微）朔天科技",
-  "desc": "杭州银行生产上线",
-  "cause": "",
-  "solution": "",
-  "solvedDate": "",
-  "status": "未解决",
-  "att": {
-   "desc": [],
-   "cause": [],
-   "solution": []
+  {
+    "seq": 1,
+    "date": "2026-09-15",
+    "type": "他行直联测试",
+    "customer": "珠海农控",
+    "desc": "民生银行直联测试",
+    "cause": "",
+    "solution": "",
+    "solvedDate": "",
+    "handler": "蔡宏裕",
+    "note": "",
+    "trail": []
   },
-  "handler": "李金文",
-  "note": ""
- },
- {
-  "seq": 4,
-  "date": "2026-09-17",
-  "type": "他行直联测试",
-  "customer": "海纳人力",
-  "desc": "招商银行直联测试",
-  "cause": "",
-  "solution": "",
-  "solvedDate": "",
-  "status": "未解决",
-  "att": {
-   "desc": [],
-   "cause": [],
-   "solution": []
+  {
+    "seq": 2,
+    "date": "2026-09-15",
+    "type": "他行直联测试",
+    "customer": "珠海交控",
+    "desc": "招商银行直联测试",
+    "cause": "",
+    "solution": "",
+    "solvedDate": "",
+    "handler": "李金文",
+    "note": "",
+    "trail": [
+      {
+        "time": "2026-09-17 11:28",
+        "kind": "进展",
+        "text": "待总行开通访问招行的网络"
+      }
+    ]
   },
-  "handler": "蔡宏裕",
-  "note": "",
-  "trail": [
-   {
-    "time": "2026-09-17 11:29",
-    "kind": "进展",
-    "text": "待总行开通访问招行的网络"
-   }
-  ]
- },
- {
-  "seq": 5,
-  "date": "2026-09-17",
-  "type": "他行直联上线",
-  "customer": "极海微",
-  "desc": "平安银行直联上线",
-  "cause": "",
-  "solution": "",
-  "solvedDate": "",
-  "status": "未解决",
-  "att": {
-   "desc": [],
-   "cause": [],
-   "solution": []
+  {
+    "seq": 3,
+    "date": "2026-09-17",
+    "type": "他行直联上线",
+    "customer": "（极海微）朔天科技",
+    "desc": "杭州银行生产上线",
+    "cause": "",
+    "solution": "",
+    "solvedDate": "",
+    "status": "未解决",
+    "att": {
+      "desc": [],
+      "cause": [],
+      "solution": []
+    },
+    "handler": "李金文",
+    "note": ""
   },
-  "handler": "陈锡君",
-  "note": ""
- }
+  {
+    "seq": 4,
+    "date": "2026-09-17",
+    "type": "他行直联测试",
+    "customer": "海纳人力",
+    "desc": "招商银行直联测试",
+    "cause": "",
+    "solution": "",
+    "solvedDate": "",
+    "status": "未解决",
+    "att": {
+      "desc": [],
+      "cause": [],
+      "solution": []
+    },
+    "handler": "蔡宏裕",
+    "note": "",
+    "trail": [
+      {
+        "time": "2026-09-17 11:29",
+        "kind": "进展",
+        "text": "待总行开通访问招行的网络"
+      }
+    ]
+  },
+  {
+    "seq": 5,
+    "date": "2026-09-17",
+    "type": "他行直联上线",
+    "customer": "极海微",
+    "desc": "平安银行直联上线",
+    "cause": "",
+    "solution": "",
+    "solvedDate": "",
+    "status": "未解决",
+    "att": {
+      "desc": [],
+      "cause": [],
+      "solution": []
+    },
+    "handler": "陈锡君",
+    "note": ""
+  },
+  {
+    "seq": 6,
+    "date": "2026-09-11",
+    "type": "生产问题",
+    "customer": "龙腾出行",
+    "desc": "工行账号 3602008119200164690 回单失败，在工行的sftp上有回单压缩包，系统未取到回单，且手工补传失败",
+    "cause": "",
+    "solution": "",
+    "solvedDate": "2026-09-17",
+    "status": "已完成",
+    "att": {
+      "desc": [],
+      "cause": [],
+      "solution": []
+    },
+    "handler": "陈锡君",
+    "note": "",
+    "trail": [
+      {
+        "time": "2026-09-17 14:35",
+        "kind": "进展",
+        "text": "9.15升级通信客户端到IPCT-V4.2-20260814"
+      },
+      {
+        "time": "2026-09-17 14:36",
+        "kind": "进展",
+        "text": "检查日志仍提示：invalid privatekey"
+      },
+      {
+        "time": "2026-09-17 14:36",
+        "kind": "进展",
+        "text": "小榄城建的密钥key与龙腾格式一样，可以查到回单"
+      },
+      {
+        "time": "2026-09-17 14:37",
+        "kind": "进展",
+        "text": "龙腾的前置机通过filezilla以密钥的形式可以登录访问sftp"
+      }
+    ]
+  }
 ]
