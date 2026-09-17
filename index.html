@@ -130,7 +130,9 @@
       <div class="full"><label>问题原因</label><textarea id="fCause"></textarea></div>
       <div class="full"><label>解决方案</label><textarea id="fSolution"></textarea></div>
       <div><label>解决日期（留空=未解决）</label><input type="date" id="fSolved"></div>
-      <div><label>备注</label><input type="text" id="fNote"></div>
+      <div><label>处理人</label><input type="text" id="fHandler" list="handlerList" placeholder="输入或从下拉选择"></div>
+      <div class="full"><label>备注</label><input type="text" id="fNote"></div>
+      <datalist id="handlerList"></datalist>
     </div>
     <div class="modal-foot">
       <button onclick="closeEdit()">取消</button>
@@ -265,6 +267,7 @@ function render() {
       <td class="editable" data-field="cause" title="双击编辑">${esc(t.cause).replace(/\n/g, "<br>") || '<span style="color:var(--muted)">—</span>'}</td>
       <td class="editable" data-field="solution" title="双击编辑">${esc(t.solution).replace(/\n/g, "<br>") || '<span style="color:var(--muted)">—</span>'}</td>
       <td>${t.solvedDate ? `<span class="solved">✔ ${t.solvedDate}</span>` : '<span style="color:#b45309">未解决</span>'}</td>
+      <td class="editable" data-field="handler" title="双击编辑">${esc(t.handler) || '<span style="color:var(--muted)">—</span>'}</td>
       <td class="editable" data-field="note" title="双击编辑">${esc(t.note) || '<span style="color:var(--muted)">—</span>'}</td>
       <td class="actions">
         <button class="ghost" style="padding:2px 8px;font-size:12px" onclick="openEdit(${t.seq})">编辑</button>
@@ -342,6 +345,7 @@ function saveEdit() {
     cause: document.getElementById("fCause").value.trim(),
     solution: document.getElementById("fSolution").value.trim(),
     solvedDate: document.getElementById("fSolved").value || "",
+    handler: document.getElementById("fHandler").value.trim(),
     note: document.getElementById("fNote").value.trim(),
   };
   if (editingId) {
