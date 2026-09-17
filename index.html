@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>每日工作任务记录</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --card: #ffffff; --border: #e3e5e8;
+    --text: #24292f; --muted: #6b7280; --primary: #2563eb;
+    --primary-hover: #1d4ed8; --danger: #dc2626;
+    --warn-bg: #fff8d6; --warn-border: #f0d264;
+    --ok: #16a34a;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #16181d; --card: #1f2229; --border: #33363e;
+      --text: #e6e8eb; --muted: #9aa0aa;
+      --warn-bg: #3a3320; --warn-border: #8a7627;
+    }
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: "Microsoft YaHei", "PingFang SC", system-ui, sans-serif; background: var(--bg); color: var(--text); font-size: 14px; }
+  .container { max-width: 1200px; margin: 0 auto; padding: 20px 16px 60px; }
+  header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; margin-bottom: 14px; }
+  h1 { font-size: 20px; }
+  .toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 12px; }
+  button, select, input[type="text"], input[type="date"], input[type="search"], textarea {
+    font: inherit; color: var(--text); background: var(--card);
+    border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px;
+  }
+  button { cursor: pointer; }
+  button.primary { background: var(--primary); color: #fff; border-color: var(--primary); }
+  button.primary:hover { background: var(--primary-hover); }
+  button.ghost:hover { border-color: var(--primary); color: var(--primary); }
+  button.danger-link { border: none; background: none; color: var(--danger); cursor: pointer; padding: 2px 6px; }
+  .toolbar input[type="search"] { width: 200px; }
+  .stats { color: var(--muted); font-size: 13px; margin-left: auto; }
+  .stats b.undone { color: #b45309; }
+  table { width: 100%; border-collapse: collapse; background: var(--card); border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+  th, td { border-bottom: 1px solid var(--border); padding: 8px 10px; text-align: left; vertical-align: top; }
+  th { background: var(--card); font-size: 13px; color: var(--muted); position: sticky; top: 0; white-space: nowrap; }
+  td.seq { color: var(--muted); white-space: nowrap; }
+  td.editable { cursor: text; }
+  td.editable:hover { background: rgba(37,99,235,.06); }
+  td .inline-input { width: 100%; min-width: 120px; font: inherit; }
+  tr.undone td { background: var(--warn-bg); }
+  tr.undone td:first-child { border-left: 3px solid var(--warn-border); }
+  .badge { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 12px; white-space: nowrap; }
+  .badge.t1 { background: #dbeafe; color: #1d4ed8; }
+  .badge.t2 { background: #fee2e2; color: #b91c1c; }
+  .badge.t3 { background: #dcfce7; color: #15803d; }
+  .badge.t4 { background: #ede9fe; color: #6d28d9; }
+  .solved { color: var(--ok); white-space: nowrap; }
+  .actions { white-space: nowrap; }
+  .empty-tip { text-align: center; color: var(--muted); padding: 40px 0; }
+  /* 模态框 */
+  .mask { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 10; align-items: flex-start; justify-content: center; padding: 40px 16px; overflow: auto; }
+  .mask.show { display: flex; }
+  .modal { background: var(--card); border-radius: 10px; width: 620px; max-width: 100%; padding: 20px 22px; }
+  .modal h2 { font-size: 16px; margin-bottom: 14px; }
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; }
+  .form-grid .full { grid-column: 1 / -1; }
+  label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 4px; }
+  .form-grid input, .form-grid select, .form-grid textarea { width: 100%; }
+  textarea { resize: vertical; min-height: 60px; }
+  .modal-foot { display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; }
+  .hint { font-size: 12px; color: var(--muted); margin-top: 4px; }
+  .sync-bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 10px 0 4px; font-size: 13px; color: var(--muted); }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); display: inline-block; }
+  .dot.ok { background: var(--ok); } .dot.err { background: var(--danger); }
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <h1>📋 每日工作任务记录</h1>
+    <div style="display:flex; gap:8px;">
+      <button class="primary" onclick="openEdit()">＋ 新增任务</button>
+      <button class="ghost" onclick="openSettings()">⚙ 设置</button>
+    </div>
+  </header>
+
+  <div class="toolbar">
+    <select id="filterType" onchange="render()">
+      <option value="">全部类型</option>
+    </select>
+    <select id="filterStatus" onchange="render()">
+      <option value="">全部状态</option>
+      <option value="undone">未解决</option>
+      <option value="solved">已解决</option>
+    </select>
+    <input type="search" id="kw" placeholder="搜索关键词…" oninput="render()">
+    <button class="ghost" onclick="exportCsv()">导出 CSV</button>
+    <button class="ghost" onclick="exportJson()">导出 JSON</button>
+    <label class="ghost" style="cursor:pointer;border:1px solid var(--border);border-radius:6px;padding:6px 10px;">
+      导入 JSON<input type="file" accept=".json" style="display:none" onchange="importJson(this)">
+    </label>
+    <div class="stats" id="stats"></div>
+  </div>
+
+  <div class="sync-bar">
+    <span class="dot" id="syncDot"></span><span id="syncText">本地模式（未配置 GitHub）</span>
+    <button class="ghost" style="padding:2px 8px;font-size:12px;" onclick="pullFromGitHub()">从 GitHub 拉取</button>
+    <button class="ghost" style="padding:2px 8px;font-size:12px;" onclick="pushToGitHub()">保存到 GitHub</button>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th style="width:46px">序号</th><th style="width:100px">提出日期</th>
+        <th style="width:110px">任务类型</th><th style="min-width:200px">任务描述</th>
+        <th style="min-width:160px">问题原因</th><th style="min-width:160px">解决方案</th>
+        <th style="width:100px">解决日期</th><th style="width:110px">备注</th><th style="width:90px">操作</th>
+      </tr>
+    </thead>
+    <tbody id="tbody"></tbody>
+  </table>
+</div>
+
+<!-- 新增/编辑 模态框 -->
+<div class="mask" id="editMask">
+  <div class="modal">
+    <h2 id="editTitle">新增任务</h2>
+    <div class="form-grid">
+      <div><label>任务提出日期 *</label><input type="date" id="fDate"></div>
+      <div><label>任务类型 *</label><select id="fType"></select></div>
+      <div class="full"><label>任务描述 *</label><textarea id="fDesc" placeholder="做了什么 / 遇到什么问题"></textarea></div>
+      <div class="full"><label>问题原因</label><textarea id="fCause"></textarea></div>
+      <div class="full"><label>解决方案</label><textarea id="fSolution"></textarea></div>
+      <div><label>解决日期（留空=未解决）</label><input type="date" id="fSolved"></div>
+      <div><label>备注</label><input type="text" id="fNote"></div>
+    </div>
+    <div class="modal-foot">
+      <button onclick="closeEdit()">取消</button>
+      <button class="primary" onclick="saveEdit()">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- 设置 模态框 -->
+<div class="mask" id="setMask">
+  <div class="modal">
+    <h2>设置</h2>
+    <div class="form-grid">
+      <div class="full"><label>GitHub 仓库（如 xijun1115/work-log）</label><input type="text" id="sRepo" placeholder="owner/repo"></div>
+      <div><label>分支</label><input type="text" id="sBranch" value="main"></div>
+      <div><label>数据文件路径</label><input type="text" id="sPath" value="data/tasks.json"></div>
+      <div class="full"><label>GitHub Token（fine-grained，仅需该仓库 Contents 读写权限）</label>
+        <input type="password" id="sToken" placeholder="github_pat_…">
+        <div class="hint">Token 只保存在本浏览器 localStorage，不会上传。建议用 Fine-grained token，只勾选这一个仓库的 Contents: Read and write。</div>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button onclick="closeSettings()">关闭</button>
+      <button class="primary" onclick="saveSettings()">保存设置</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const TYPES = ["他行直联测试", "生产问题", "业务需求"];
+const LS_KEY = "worklog_tasks_v1";
+const LS_CFG = "worklog_gh_cfg_v1";
+
+let tasks = [];
+let editingId = null;
+
+/* ---------- 存取 ---------- */
+function loadLocal() {
+  try { tasks = JSON.parse(localStorage.getItem(LS_KEY)) || []; }
+  catch { tasks = []; }
+}
+function saveLocal() { localStorage.setItem(LS_KEY, JSON.stringify(tasks)); }
+function cfg() {
+  try { return JSON.parse(localStorage.getItem(LS_CFG)) || {}; } catch { return {}; }
+}
+
+/* ---------- GitHub 同步 ---------- */
+function ghHeaders() {
+  const c = cfg();
+  return { "Authorization": "Bearer " + c.token, "Accept": "application/vnd.github+json" };
+}
+function ghUrl() {
+  const c = cfg();
+  return `https://api.github.com/repos/${c.repo}/contents/${c.path}`;
+}
+function b64encode(str) { return btoa(unescape(encodeURIComponent(str))); }
+function b64decode(str) { return decodeURIComponent(escape(atob(str.replace(/\n/g, "")))); }
+
+function setSync(state, text) {
+  const d = document.getElementById("syncDot");
+  d.className = "dot " + (state || "");
+  document.getElementById("syncText").textContent = text;
+}
+
+async function pullFromGitHub() {
+  const c = cfg();
+  if (!c.repo || !c.token) return alert("请先在「设置」里配置仓库和 Token");
+  setSync("", "正在从 GitHub 拉取…");
+  try {
+    const r = await fetch(ghUrl() + "?ref=" + encodeURIComponent(c.branch || "main"), { headers: ghHeaders() });
+    if (r.status === 404) { setSync("ok", "GitHub 上还没有数据文件，将创建新文件"); return; }
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    const j = await r.json();
+    const remote = JSON.parse(b64decode(j.content));
+    // 简单合并：按 seq 去重，本地没有的补进来
+    const seqs = new Set(tasks.map(t => t.seq));
+    let added = 0;
+    for (const t of remote) if (!seqs.has(t.seq)) { tasks.push(t); added++; }
+    tasks.sort((a, b) => a.seq - b.seq);
+    saveLocal(); render();
+    setSync("ok", `拉取成功：远端 ${remote.length} 条，新增 ${added} 条`);
+  } catch (e) { setSync("err", "拉取失败：" + e.message); }
+}
+
+async function pushToGitHub() {
+  const c = cfg();
+  if (!c.repo || !c.token) return alert("请先在「设置」里配置仓库和 Token");
+  setSync("", "正在保存到 GitHub…");
+  try {
+    let sha;
+    const r = await fetch(ghUrl() + "?ref=" + encodeURIComponent(c.branch || "main"), { headers: ghHeaders() });
+    if (r.ok) sha = (await r.json()).sha;
+    const body = {
+      message: "worklog: 更新任务记录 " + new Date().toLocaleString("zh-CN"),
+      content: b64encode(JSON.stringify(tasks, null, 2)),
+      branch: c.branch || "main",
+    };
+    if (sha) body.sha = sha;
+    const p = await fetch(ghUrl(), { method: "PUT", headers: ghHeaders(), body: JSON.stringify(body) });
+    if (!p.ok) throw new Error("HTTP " + p.status + " " + (await p.text()).slice(0, 120));
+    setSync("ok", `已保存到 GitHub：${c.repo}/${c.path}（${tasks.length} 条）`);
+  } catch (e) { setSync("err", "保存失败：" + e.message); }
+}
+
+/* ---------- 渲染 ---------- */
+function typeBadge(t) {
+  const i = TYPES.indexOf(t);
+  return `<span class="badge t${i >= 0 ? i + 1 : 4}">${esc(t)}</span>`;
+}
+function esc(s) { return String(s ?? "").replace(/[&<>"']/g, m => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m])); }
+
+function render() {
+  const ft = document.getElementById("filterType").value;
+  const fs = document.getElementById("filterStatus").value;
+  const kw = document.getElementById("kw").value.trim().toLowerCase();
+  const rows = tasks.filter(t => {
+    if (ft && t.type !== ft) return false;
+    if (fs === "undone" && t.solvedDate) return false;
+    if (fs === "solved" && !t.solvedDate) return false;
+    if (kw && ![t.desc, t.cause, t.solution, t.note].join(" ").toLowerCase().includes(kw)) return false;
+    return true;
+  });
+  const tb = document.getElementById("tbody");
+  tb.innerHTML = rows.length ? rows.map(t => `
+    <tr class="${t.solvedDate ? "" : "undone"}" data-seq="${t.seq}">
+      <td class="seq">${t.seq}</td>
+      <td>${t.date}</td>
+      <td>${typeBadge(t.type)}</td>
+      <td class="editable" data-field="desc" title="双击编辑">${esc(t.desc).replace(/\n/g, "<br>")}</td>
+      <td class="editable" data-field="cause" title="双击编辑">${esc(t.cause).replace(/\n/g, "<br>") || '<span style="color:var(--muted)">—</span>'}</td>
+      <td class="editable" data-field="solution" title="双击编辑">${esc(t.solution).replace(/\n/g, "<br>") || '<span style="color:var(--muted)">—</span>'}</td>
+      <td>${t.solvedDate ? `<span class="solved">✔ ${t.solvedDate}</span>` : '<span style="color:#b45309">未解决</span>'}</td>
+      <td class="editable" data-field="note" title="双击编辑">${esc(t.note) || '<span style="color:var(--muted)">—</span>'}</td>
+      <td class="actions">
+        <button class="ghost" style="padding:2px 8px;font-size:12px" onclick="openEdit(${t.seq})">编辑</button>
+        <button class="danger-link" onclick="delTask(${t.seq})">删除</button>
+      </td>
+    </tr>`).join("")
+    : `<tr><td colspan="9" class="empty-tip">暂无记录，点右上角「＋ 新增任务」开始</td></tr>`;
+
+  const undone = tasks.filter(t => !t.solvedDate).length;
+  document.getElementById("stats").innerHTML =
+    `共 ${tasks.length} 条 · <b class="undone">未解决 ${undone}</b> · 已解决 ${tasks.length - undone}`;
+  bindInlineEdit();
+}
+
+/* 双击行内编辑 */
+function bindInlineEdit() {
+  document.querySelectorAll("td.editable").forEach(td => {
+    td.ondblclick = () => {
+      const seq = +td.closest("tr").dataset.seq;
+      const field = td.dataset.field;
+      const task = tasks.find(t => t.seq === seq);
+      const old = task[field] || "";
+      td.innerHTML = `<textarea class="inline-input" rows="${Math.max(2, old.split("\n").length)}">${esc(old)}</textarea>`;
+      const ta = td.querySelector("textarea");
+      ta.focus(); ta.select();
+      const commit = () => {
+        task[field] = ta.value.trim();
+        saveLocal(); render();
+      };
+      ta.onblur = commit;
+      ta.onkeydown = e => { if (e.key === "Escape") { ta.onblur = null; render(); } };
+    };
+  });
+}
+
+/* ---------- 新增 / 编辑 ---------- */
+function nextSeq() { return tasks.reduce((m, t) => Math.max(m, t.seq), 0) + 1; }
+
+function openEdit(seq) {
+  editingId = seq || null;
+  const t = seq ? tasks.find(x => x.seq === seq) : null;
+  document.getElementById("editTitle").textContent = t ? `编辑任务 #${t.seq}` : "新增任务";
+  document.getElementById("fDate").value = t ? t.date : new Date().toISOString().slice(0, 10);
+  const sel = document.getElementById("fType");
+  sel.innerHTML = TYPES.map(x => `<option>${x}</option>`).join("") + `<option value="__other">自定义…</option>`;
+  if (t && !TYPES.includes(t.type)) { sel.value = "__other"; sel.dataset.custom = t.type; }
+  else sel.value = t ? t.type : TYPES[0];
+  document.getElementById("fDesc").value = t?.desc || "";
+  document.getElementById("fCause").value = t?.cause || "";
+  document.getElementById("fSolution").value = t?.solution || "";
+  document.getElementById("fSolved").value = t?.solvedDate || "";
+  document.getElementById("fNote").value = t?.note || "";
+  document.getElementById("editMask").classList.add("show");
+}
+function closeEdit() { document.getElementById("editMask").classList.remove("show"); }
+
+function saveEdit() {
+  const date = document.getElementById("fDate").value;
+  let type = document.getElementById("fType").value;
+  if (type === "__other") type = prompt("输入自定义任务类型：") || "";
+  const desc = document.getElementById("fDesc").value.trim();
+  if (!date || !type || !desc) return alert("提出日期、任务类型、任务描述为必填项");
+  const data = {
+    date, type, desc,
+    cause: document.getElementById("fCause").value.trim(),
+    solution: document.getElementById("fSolution").value.trim(),
+    solvedDate: document.getElementById("fSolved").value || "",
+    note: document.getElementById("fNote").value.trim(),
+  };
+  if (editingId) {
+    Object.assign(tasks.find(t => t.seq === editingId), data);
+  } else {
+    tasks.push({ seq: nextSeq(), ...data });
+  }
+  tasks.sort((a, b) => a.seq - b.seq);
+  saveLocal(); render(); closeEdit();
+  if (cfg().autoPush) pushToGitHub();
+}
+
+function delTask(seq) {
+  const t = tasks.find(x => x.seq === seq);
+  if (!confirm(`确定删除任务 #${seq}？\n${t.desc.slice(0, 40)}…`)) return;
+  tasks = tasks.filter(x => x.seq !== seq);
+  saveLocal(); render();
+}
+
+/* ---------- 设置 ---------- */
+function openSettings() {
+  const c = cfg();
+  document.getElementById("sRepo").value = c.repo || "";
+  document.getElementById("sBranch").value = c.branch || "main";
+  document.getElementById("sPath").value = c.path || "data/tasks.json";
+  document.getElementById("sToken").value = c.token || "";
+  document.getElementById("setMask").classList.add("show");
+}
+function closeSettings() { document.getElementById("setMask").classList.remove("show"); }
+function saveSettings() {
+  localStorage.setItem(LS_CFG, JSON.stringify({
+    repo: document.getElementById("sRepo").value.trim(),
+    branch: document.getElementById("sBranch").value.trim() || "main",
+    path: document.getElementById("sPath").value.trim() || "data/tasks.json",
+    token: document.getElementById("sToken").value.trim(),
+  }));
+  closeSettings();
+  setSync("ok", "配置已保存，可点「从 GitHub 拉取」同步数据");
+}
+
+/* ---------- 导入导出 ---------- */
+function download(name, content, mime) {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([content], { type: mime }));
+  a.download = name; a.click(); URL.revokeObjectURL(a.href);
+}
+function exportCsv() {
+  const head = ["序号", "任务提出日期", "任务类型", "任务描述", "问题原因", "解决方案", "解决日期", "备注"];
+  const lines = [head];
+  tasks.forEach(t => lines.push([t.seq, t.date, t.type, t.desc, t.cause, t.solution, t.solvedDate, t.note]));
+  const csv = "\uFEFF" + lines.map(r => r.map(v => `"${String(v ?? "").replace(/"/g, '""')}"`).join(",")).join("\r\n");
+  download(`工作任务记录_${new Date().toISOString().slice(0, 10)}.csv`, csv, "text/csv;charset=utf-8");
+}
+function exportJson() {
+  download(`worklog_backup_${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify(tasks, null, 2), "application/json");
+}
+function importJson(input) {
+  const file = input.files[0]; if (!file) return;
+  const r = new FileReader();
+  r.onload = () => {
+    try {
+      const arr = JSON.parse(r.result);
+      if (!Array.isArray(arr)) throw new Error("格式不对");
+      const seqs = new Set(tasks.map(t => t.seq));
+      let added = 0;
+      arr.forEach(t => { if (!seqs.has(t.seq)) { tasks.push(t); added++; } });
+      tasks.sort((a, b) => a.seq - b.seq);
+      saveLocal(); render();
+      alert(`导入完成，新增 ${added} 条`);
+    } catch (e) { alert("导入失败：" + e.message); }
+  };
+  r.readAsText(file, "utf-8");
+  input.value = "";
+}
+
+/* ---------- init ---------- */
+(function init() {
+  loadLocal();
+  const ft = document.getElementById("filterType");
+  ft.innerHTML = `<option value="">全部类型</option>` + TYPES.map(t => `<option>${t}</option>`).join("");
+  const c = cfg();
+  if (c.repo && c.token) setSync("", "已配置 GitHub，可拉取/保存");
+  render();
+})();
+</script>
+</body>
+</html>

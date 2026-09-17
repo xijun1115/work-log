@@ -1,0 +1,43 @@
+# work-log · 每日工作任务记录
+
+单文件网页工具，零依赖。记录每天的工作任务，数据可同步到 GitHub 私有仓库，跨设备可用。
+
+## 字段
+
+| 字段 | 说明 |
+|---|---|
+| 序号 | 自动递增，删除不重排 |
+| 任务提出日期 | 默认今天 |
+| 任务类型 | 他行直联测试 / 生产问题 / 业务需求（支持自定义） |
+| 任务描述 | 双击表格单元格可直接行内编辑 |
+| 问题原因 | 双击行内编辑 |
+| 解决方案 | 双击行内编辑 |
+| 解决日期 | 填了即视为已解决；未解决的整行黄色高亮 |
+| 备注 | 双击行内编辑 |
+
+## 功能
+
+- 新增 / 编辑 / 删除任务（全字段）
+- 双击「任务描述、问题原因、解决方案、备注」单元格快速行内编辑
+- 按类型 / 状态筛选，关键词搜索
+- 导出 CSV（Excel 可直接打开）、JSON 备份 / 导入
+- GitHub 同步：数据存 `data/tasks.json`，每次修改可在远端留痕（相当于免费版本历史）
+
+## 使用方式
+
+### 方式一：本地打开（推荐，数据最安全）
+直接双击 `index.html` 用浏览器打开即可。数据存在浏览器 localStorage。
+
+### 方式二：GitHub 同步（跨设备）
+1. 在 GitHub 创建**私有**仓库（记录含客户信息，务必私有）
+2. 生成 Fine-grained Personal Access Token：Settings → Developer settings → Fine-grained tokens → 只勾选该仓库的 **Contents: Read and write**
+3. 打开页面 → ⚙ 设置 → 填入 `owner/repo`、分支 `main`、路径 `data/tasks.json`、Token
+4. 「从 GitHub 拉取」合并远端数据；「保存到 GitHub」把当前数据提交到仓库
+
+## 部署到 GitHub Pages（可选）
+
+页面本身不含数据，公开部署也不泄露记录（数据在私有仓库 / 本地）：
+1. 仓库 Settings → Pages → Source 选 `main` 分支根目录
+2. 访问 `https://<用户名>.github.io/work-log/`
+
+> 注意：若在 Pages 上使用 GitHub 同步，Token 输入在谁浏览器里就存谁浏览器，多人使用各自填各自的 Token。
