@@ -131,5 +131,23 @@
         "text": "龙腾的前置机通过filezilla以密钥的形式可以登录访问sftp"
       }
     ]
+  },
+  {
+    "seq": 7,
+    "date": "2026-09-17",
+    "type": "云跨行上线",
+    "customer": "珠海金航产业投资集团有限公司",
+    "desc": "云跨行上线",
+    "cause": "",
+    "solution": "",
+    "solvedDate": "",
+    "status": "未解决",
+    "att": {
+      "desc": [],
+      "cause": [],
+      "solution": []
+    },
+    "handler": "蔡宏裕",
+    "note": ""
   }
 ]
