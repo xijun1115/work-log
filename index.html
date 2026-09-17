@@ -385,7 +385,7 @@ let kb = [];
 let page = "task";   // task | go | kb
 let editingId = null;
 let visibleCols = new Set(COLS.map(c => c.key));
-const D = () => page === "task" ? tasks : page === "go" ? golive : kb;
+const D = (k) => { const p = k || page; return p === "task" ? tasks : p === "go" ? golive : kb; };
 
 const PAGES = {
   task: { tab: "tabTask", body: "pageTask" },
@@ -415,11 +415,24 @@ function loadLocal() {
   try { tasks = JSON.parse(localStorage.getItem(LS_KEY)) || []; } catch { tasks = []; }
   try { golive = JSON.parse(localStorage.getItem(GO_KEY)) || []; } catch { golive = []; }
   try { kb = JSON.parse(localStorage.getItem(KB_KEY)) || []; } catch { kb = []; }
+  /* 迁移修复：Excel 导入的历史数据序号可能是文本或重复的，统一成数字；重复则重排 */
+  tasks.forEach(t => { if (typeof t.seq !== "number" || isNaN(t.seq)) t.seq = parseInt(t.seq) || 0; });
+  golive.forEach(g => { if (typeof g.seq !== "number" || isNaN(g.seq)) g.seq = parseInt(g.seq) || 0; });
+  const seen = new Set();
+  golive.sort((a, b) => a.seq - b.seq).forEach(g => {
+    if (!g.seq || seen.has(g.seq)) g.seq = (golive.reduce((m, x) => Math.max(m, x.seq), 0) || 0) + 1;
+    seen.add(g.seq);
+  });
 }
 function saveLocal() {
-  localStorage.setItem(LS_KEY, JSON.stringify(tasks));
-  localStorage.setItem(GO_KEY, JSON.stringify(golive));
-  localStorage.setItem(KB_KEY, JSON.stringify(kb));
+  /* 每个 key 独立 try/catch：一个写失败（如配额超限）不能拖垮其它数据 */
+  [[LS_KEY, tasks], [GO_KEY, golive], [KB_KEY, kb]].forEach(([k, v]) => {
+    try { localStorage.setItem(k, JSON.stringify(v)); }
+    catch (e) {
+      console.error("localStorage 写入失败:", k, e);
+      setSync("err", "⚠ 本地存储写入失败（空间可能不足），数据刷新后会丢失！请点「保存到 GitHub」备份，并少传大附件");
+    }
+  });
 }
 function cfg() {
   try { return JSON.parse(localStorage.getItem(LS_CFG)) || {}; } catch { return {}; }
@@ -430,10 +443,10 @@ function ghHeaders() {
   const c = cfg();
   return { "Authorization": "Bearer " + c.token, "Accept": "application/vnd.github+json" };
 }
-function ghUrl() {
+function ghUrl(kind) {
   const c = cfg();
-  const path = page === "task" ? (c.path || "data/tasks.json")
-    : page === "go" ? (c.goPath || "data/golive.json")
+  const path = kind === "task" ? (c.path || "data/tasks.json")
+    : kind === "go" ? (c.goPath || "data/golive.json")
     : (c.kbPath || "data/kb.json");
   return `https://api.github.com/repos/${c.repo}/contents/${path}`;
 }
@@ -447,16 +460,17 @@ function setSync(state, text) {
   });
 }
 
-async function pullFromGitHub() {
+async function pullFromGitHub(kind, silent) {
+  const k = kind || page;
   const c = cfg();
-  if (!c.repo || !c.token) return alert("请先在「设置」里配置仓库和 Token");
-  setSync("", "正在从 GitHub 拉取…");
+  if (!c.repo || !c.token) { if (!silent) alert("请先在「设置」里配置仓库和 Token"); return; }
+  if (!silent) setSync("", "正在从 GitHub 拉取…");
   try {
-    let r = await fetch(ghUrl() + "?ref=" + encodeURIComponent(c.branch || "main"), { headers: ghHeaders() });
-    if (r.status === 404) { setSync("ok", "GitHub 上还没有数据文件，将创建新文件"); return; }
+    let r = await fetch(ghUrl(k) + "?ref=" + encodeURIComponent(c.branch || "main"), { headers: ghHeaders() });
+    if (r.status === 404) { if (!silent) setSync("ok", "GitHub 上还没有数据文件，将创建新文件"); return; }
     if (!r.ok) {
       // 文件超过 1MB 时 Contents API 会拒绝，改用 raw 模式直接取内容
-      r = await fetch(ghUrl() + "?ref=" + encodeURIComponent(c.branch || "main"),
+      r = await fetch(ghUrl(k) + "?ref=" + encodeURIComponent(c.branch || "main"),
         { headers: { ...ghHeaders(), "Accept": "application/vnd.github.raw" } });
       if (!r.ok) throw new Error("HTTP " + r.status);
       const text = await r.text();
@@ -466,7 +480,7 @@ async function pullFromGitHub() {
       var remote = JSON.parse(b64decode(j.content));
     }
     // 简单合并：按 seq 去重，本地没有的补进来
-    const arr = D();
+    const arr = D(k);
     const seqs = new Set(arr.map(t => t.seq));
     let added = 0;
     for (const t of remote) if (!seqs.has(t.seq)) { arr.push(t); added++; }
@@ -482,7 +496,7 @@ async function pushToGitHub() {
   setSync("", "正在保存到 GitHub…");
   try {
     let sha;
-    const r = await fetch(ghUrl() + "?ref=" + encodeURIComponent(c.branch || "main"), { headers: ghHeaders() });
+    const r = await fetch(ghUrl(page) + "?ref=" + encodeURIComponent(c.branch || "main"), { headers: ghHeaders() });
     if (r.ok) sha = (await r.json()).sha;
     const body = {
       message: `worklog: 更新${page === "task" ? "任务" : page === "go" ? "上线" : "知识库"}记录 ` + new Date().toLocaleString("zh-CN"),
@@ -490,7 +504,7 @@ async function pushToGitHub() {
       branch: c.branch || "main",
     };
     if (sha) body.sha = sha;
-    const p = await fetch(ghUrl(), { method: "PUT", headers: ghHeaders(), body: JSON.stringify(body) });
+    const p = await fetch(ghUrl(page), { method: "PUT", headers: ghHeaders(), body: JSON.stringify(body) });
     if (!p.ok) throw new Error("HTTP " + p.status + " " + (await p.text()).slice(0, 120));
     setSync("ok", `已保存到 GitHub：${c.repo}（${D().length} 条）`);
   } catch (e) { setSync("err", "保存失败：" + e.message); }
@@ -666,7 +680,8 @@ function openGoEdit(seq) {
   document.getElementById("goEditTitle").textContent = g ? `编辑上线记录 #${g.seq}` : "新增上线记录";
   document.getElementById("gEnt").value = g?.ent || "";
   document.getElementById("gBank").value = g?.bank || "";
-  document.getElementById("gMode").innerHTML = `<option value=""></option>` + MODES.map(m => `<option${g?.mode === m ? " selected" : ""}>${m}</option>`).join("");
+  const modes = (g?.mode && !MODES.includes(g.mode)) ? [...MODES, g.mode] : MODES;
+  document.getElementById("gMode").innerHTML = `<option value=""></option>` + modes.map(m => `<option${g?.mode === m ? " selected" : ""}>${esc(m)}</option>`).join("");
   document.getElementById("gDate").value = g?.date || "";
   document.getElementById("gCity").value = g?.city || "";
   document.getElementById("gImpl").value = g?.impl || "";
@@ -687,16 +702,21 @@ function saveGoEdit() {
     impl: document.getElementById("gImpl").value.trim(),
     mgr: document.getElementById("gMgr").value.trim(),
   };
-  if (goEditingId) Object.assign(golive.find(g => g.seq === goEditingId), data);
+  if (goEditingId) {
+    const rec = golive.find(g => g.seq === goEditingId) || golive.find(g => String(g.seq) === String(goEditingId));
+    if (!rec) return alert("未找到要编辑的记录（序号 " + goEditingId + "），请刷新页面后重试");
+    Object.assign(rec, data);
+  }
   else golive.push({ seq: nextGoSeq(), ...data });
   golive.sort((a, b) => a.seq - b.seq);
   saveLocal(); render(); closeGoEdit();
 }
 
 function delGo(seq) {
-  const g = golive.find(x => x.seq === seq);
-  if (!confirm(`确定删除上线记录 #${seq}？\n${g.ent}${g.bank ? " · " + g.bank : ""}`)) return;
-  golive = golive.filter(x => x.seq !== seq);
+  const g = golive.find(x => x.seq === seq) || golive.find(x => String(x.seq) === String(seq));
+  if (!g) return;
+  if (!confirm(`确定删除上线记录 #${g.seq}？\n${g.ent}${g.bank ? " · " + g.bank : ""}`)) return;
+  golive = golive.filter(x => x !== g);
   saveLocal(); render();
 }
 
@@ -932,7 +952,8 @@ function bindInlineEdit() {
     td.ondblclick = () => {
       const seq = +td.closest("tr").dataset.seq;
       const field = td.dataset.field;
-      const task = D().find(t => t.seq === seq);
+      const pool = D();
+      const task = pool.find(t => t.seq === seq) || pool.find(t => String(t.seq) === String(seq));
       if (!task) return;
       /* 状态列特殊处理：双击直接切换 */
       if (field === "status") {
@@ -1203,7 +1224,13 @@ function importJson(input) {
   const ft = document.getElementById("filterType");
   ft.innerHTML = `<option value="">全部类型</option>` + TYPES.map(t => `<option>${t}</option>`).join("");
   const c = cfg();
-  if (c.repo && c.token) setSync("", "已配置 GitHub，可拉取/保存");
+  if (c.repo && c.token) {
+    setSync("", "已配置 GitHub，正在自动同步…");
+    /* 启动时自动拉取全部数据集：换浏览器/换端口打开也能找回数据 */
+    pullFromGitHub("task", true);
+    setTimeout(() => pullFromGitHub("go", true), 300);
+    setTimeout(() => pullFromGitHub("kb", true), 600);
+  }
   document.addEventListener("click", e => {
     const d = document.getElementById("colPick");
     if (d.open && !d.contains(e.target)) d.open = false;   /* 点外面关闭列设置 */
