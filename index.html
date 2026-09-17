@@ -109,7 +109,7 @@
     <thead>
       <tr>
         <th style="width:46px">序号</th><th style="width:100px">提出日期</th>
-        <th style="width:110px">任务类型</th><th style="min-width:200px">任务描述</th>
+        <th style="width:110px">任务类型</th><th style="width:110px">客户名称</th><th style="min-width:200px">任务描述</th>
         <th style="min-width:160px">问题原因</th><th style="min-width:160px">解决方案</th>
         <th style="width:100px">解决日期</th><th style="width:110px">备注</th><th style="width:90px">操作</th>
       </tr>
@@ -125,6 +125,7 @@
     <div class="form-grid">
       <div><label>任务提出日期 *</label><input type="date" id="fDate"></div>
       <div><label>任务类型 *</label><select id="fType"></select></div>
+      <div class="full"><label>客户名称</label><input type="text" id="fCustomer" list="customerList" placeholder="输入或从下拉选择（双击表格也可改）"><datalist id="customerList"></datalist></div>
       <div class="full"><label>任务描述 *</label><textarea id="fDesc" placeholder="做了什么 / 遇到什么问题"></textarea></div>
       <div class="full"><label>问题原因</label><textarea id="fCause"></textarea></div>
       <div class="full"><label>解决方案</label><textarea id="fSolution"></textarea></div>
@@ -160,6 +161,7 @@
 
 <script>
 const TYPES = ["他行直联测试", "生产问题", "业务需求"];
+const CUSTOMER_PRESETS = ["吉邦精密", "中铁二十五局", "金发科技", "广晟财司", "广州农商行", "香山电子", "曼秀雷敦", "惠州大亚湾水务", "广州数科", "安保集团", "珠海交控", "广省智协", "广东太力", "佐登妮丝", "信银理财", "珠光汽车", "清远国投", "六盯目"];
 const LS_KEY = "worklog_tasks_v1";
 const LS_CFG = "worklog_gh_cfg_v1";
 
@@ -249,7 +251,7 @@ function render() {
     if (ft && t.type !== ft) return false;
     if (fs === "undone" && t.solvedDate) return false;
     if (fs === "solved" && !t.solvedDate) return false;
-    if (kw && ![t.desc, t.cause, t.solution, t.note].join(" ").toLowerCase().includes(kw)) return false;
+    if (kw && ![t.desc, t.cause, t.solution, t.note, t.customer].join(" ").toLowerCase().includes(kw)) return false;
     return true;
   });
   const tb = document.getElementById("tbody");
@@ -258,6 +260,7 @@ function render() {
       <td class="seq">${t.seq}</td>
       <td>${t.date}</td>
       <td>${typeBadge(t.type)}</td>
+      <td class="editable" data-field="customer" title="双击编辑">${esc(t.customer) || '<span style="color:var(--muted)">—</span>'}</td>
       <td class="editable" data-field="desc" title="双击编辑">${esc(t.desc).replace(/\n/g, "<br>")}</td>
       <td class="editable" data-field="cause" title="双击编辑">${esc(t.cause).replace(/\n/g, "<br>") || '<span style="color:var(--muted)">—</span>'}</td>
       <td class="editable" data-field="solution" title="双击编辑">${esc(t.solution).replace(/\n/g, "<br>") || '<span style="color:var(--muted)">—</span>'}</td>
@@ -268,12 +271,19 @@ function render() {
         <button class="danger-link" onclick="delTask(${t.seq})">删除</button>
       </td>
     </tr>`).join("")
-    : `<tr><td colspan="9" class="empty-tip">暂无记录，点右上角「＋ 新增任务」开始</td></tr>`;
+    : `<tr><td colspan="10" class="empty-tip">暂无记录，点右上角「＋ 新增任务」开始</td></tr>`;
 
   const undone = tasks.filter(t => !t.solvedDate).length;
   document.getElementById("stats").innerHTML =
     `共 ${tasks.length} 条 · <b class="undone">未解决 ${undone}</b> · 已解决 ${tasks.length - undone}`;
   bindInlineEdit();
+  refreshCustomerList();
+}
+
+function refreshCustomerList() {
+  const used = tasks.map(t => t.customer).filter(Boolean);
+  const all = [...new Set([...CUSTOMER_PRESETS, ...used])];
+  document.getElementById("customerList").innerHTML = all.map(c => `<option value="${esc(c)}">`).join("");
 }
 
 /* 双击行内编辑 */
@@ -309,6 +319,7 @@ function openEdit(seq) {
   sel.innerHTML = TYPES.map(x => `<option>${x}</option>`).join("") + `<option value="__other">自定义…</option>`;
   if (t && !TYPES.includes(t.type)) { sel.value = "__other"; sel.dataset.custom = t.type; }
   else sel.value = t ? t.type : TYPES[0];
+  document.getElementById("fCustomer").value = t?.customer || "";
   document.getElementById("fDesc").value = t?.desc || "";
   document.getElementById("fCause").value = t?.cause || "";
   document.getElementById("fSolution").value = t?.solution || "";
@@ -325,7 +336,9 @@ function saveEdit() {
   const desc = document.getElementById("fDesc").value.trim();
   if (!date || !type || !desc) return alert("提出日期、任务类型、任务描述为必填项");
   const data = {
-    date, type, desc,
+    date, type,
+    customer: document.getElementById("fCustomer").value.trim(),
+    desc,
     cause: document.getElementById("fCause").value.trim(),
     solution: document.getElementById("fSolution").value.trim(),
     solvedDate: document.getElementById("fSolved").value || "",
@@ -376,9 +389,9 @@ function download(name, content, mime) {
   a.download = name; a.click(); URL.revokeObjectURL(a.href);
 }
 function exportCsv() {
-  const head = ["序号", "任务提出日期", "任务类型", "任务描述", "问题原因", "解决方案", "解决日期", "备注"];
+  const head = ["序号", "任务提出日期", "任务类型", "客户名称", "任务描述", "问题原因", "解决方案", "解决日期", "备注"];
   const lines = [head];
-  tasks.forEach(t => lines.push([t.seq, t.date, t.type, t.desc, t.cause, t.solution, t.solvedDate, t.note]));
+  tasks.forEach(t => lines.push([t.seq, t.date, t.type, t.customer, t.desc, t.cause, t.solution, t.solvedDate, t.note]));
   const csv = "\uFEFF" + lines.map(r => r.map(v => `"${String(v ?? "").replace(/"/g, '""')}"`).join(",")).join("\r\n");
   download(`工作任务记录_${new Date().toISOString().slice(0, 10)}.csv`, csv, "text/csv;charset=utf-8");
 }
