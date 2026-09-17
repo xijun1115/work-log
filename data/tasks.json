@@ -1,1 +1,95 @@
-[]
+[
+ {
+  "seq": 1,
+  "date": "2026-09-15",
+  "type": "他行直联测试",
+  "customer": "珠海农控",
+  "desc": "民生银行直联测试",
+  "cause": "",
+  "solution": "",
+  "solvedDate": "",
+  "handler": "蔡宏裕",
+  "note": "",
+  "trail": []
+ },
+ {
+  "seq": 2,
+  "date": "2026-09-15",
+  "type": "他行直联测试",
+  "customer": "珠海交控",
+  "desc": "招商银行直联测试",
+  "cause": "",
+  "solution": "",
+  "solvedDate": "",
+  "handler": "李金文",
+  "note": "",
+  "trail": [
+   {
+    "time": "2026-09-17 11:28",
+    "kind": "进展",
+    "text": "待总行开通访问招行的网络"
+   }
+  ]
+ },
+ {
+  "seq": 3,
+  "date": "2026-09-17",
+  "type": "他行直联上线",
+  "customer": "（极海微）朔天科技",
+  "desc": "杭州银行生产上线",
+  "cause": "",
+  "solution": "",
+  "solvedDate": "",
+  "status": "未解决",
+  "att": {
+   "desc": [],
+   "cause": [],
+   "solution": []
+  },
+  "handler": "李金文",
+  "note": ""
+ },
+ {
+  "seq": 4,
+  "date": "2026-09-17",
+  "type": "他行直联测试",
+  "customer": "海纳人力",
+  "desc": "招商银行直联测试",
+  "cause": "",
+  "solution": "",
+  "solvedDate": "",
+  "status": "未解决",
+  "att": {
+   "desc": [],
+   "cause": [],
+   "solution": []
+  },
+  "handler": "蔡宏裕",
+  "note": "",
+  "trail": [
+   {
+    "time": "2026-09-17 11:29",
+    "kind": "进展",
+    "text": "待总行开通访问招行的网络"
+   }
+  ]
+ },
+ {
+  "seq": 5,
+  "date": "2026-09-17",
+  "type": "他行直联上线",
+  "customer": "极海微",
+  "desc": "平安银行直联上线",
+  "cause": "",
+  "solution": "",
+  "solvedDate": "",
+  "status": "未解决",
+  "att": {
+   "desc": [],
+   "cause": [],
+   "solution": []
+  },
+  "handler": "陈锡君",
+  "note": ""
+ }
+]
