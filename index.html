@@ -129,6 +129,12 @@
   button.ghost:hover { border-color: var(--primary); color: var(--primary); background: var(--primary-soft); }
   button.danger-link { border: none; background: none; color: var(--danger); cursor: pointer; padding: 2px 6px; font-weight: 500; }
   button.danger-link:hover { text-decoration: underline; }
+  button.danger {
+    background: linear-gradient(180deg, #ef4444 0%, #dc2626 100%);
+    border-color: #dc2626; color: #fff;
+    box-shadow: 0 2px 8px -3px rgba(220, 38, 38, .6);
+  }
+  button.danger:hover { filter: brightness(1.06); border-color: #b91c1c; }
   .toolbar input[type="search"] { width: 210px; }
   /* 可输入式筛选框（下拉候选 + 手动输入） */
   datalist { display: none; }
@@ -259,6 +265,23 @@
   textarea { resize: vertical; min-height: 64px; line-height: 1.6; }
   .modal-foot { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
   .hint { font-size: 12px; color: var(--muted); margin-top: 5px; line-height: 1.5; }
+
+  /* ---------- 自绘确认框 / 轻提示（内置浏览器里原生 confirm/alert 不弹窗，必须自己画） ---------- */
+  #confirmMask { z-index: 60; align-items: center; padding: 16px; }
+  #confirmMask .modal { width: 420px; }
+  #confirmMask .cf-text { font-size: 13.5px; line-height: 1.7; color: var(--text); white-space: pre-wrap; word-break: break-word; }
+  #confirmMask .cf-icon { font-size: 20px; }
+  .toast-bar {
+    position: fixed; left: 50%; top: 18px; transform: translate(-50%, -14px);
+    z-index: 80; max-width: min(560px, 92vw); padding: 11px 16px;
+    background: var(--card); border: 1px solid var(--border-strong); border-left: 4px solid var(--primary);
+    border-radius: var(--radius); box-shadow: var(--shadow-md);
+    font-size: 13.5px; line-height: 1.6; color: var(--text); white-space: pre-wrap;
+    opacity: 0; pointer-events: none; transition: opacity .2s ease, transform .2s ease;
+  }
+  .toast-bar.show { opacity: 1; transform: translate(-50%, 0); }
+  .toast-bar.warn { border-left-color: #f59e0b; }
+  .toast-bar.err { border-left-color: #dc2626; color: #b91c1c; }
 
   /* ---------- 附件 ---------- */
   .att-row { margin-top: 6px; }
@@ -605,6 +628,20 @@
   </div>
 </div>
 
+<!-- 通用确认框（替代原生 confirm：内置浏览器不弹原生窗） -->
+<div class="mask" id="confirmMask">
+  <div class="modal">
+    <h2><span class="cf-icon">⚠️</span><span id="confirmTitle">确认操作</span></h2>
+    <div class="cf-text" id="confirmText"></div>
+    <div class="modal-foot">
+      <button onclick="confirmAnswer(false)">取消</button>
+      <button class="danger" id="confirmOk" onclick="confirmAnswer(true)">确定</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast-bar" id="toastBar"></div>
+
 <script>
 const TYPES = ["云跨行上线", "生产运维", "业务需求", "他行直联测试", "他行直联上线", "ERP测试", "ERP生产"];
 const CUSTOMER_PRESETS = ["吉邦精密", "中铁二十五局", "金发科技", "广晟财司", "广州农商行", "香山电子", "曼秀雷敦", "惠州大亚湾水务", "广州数科", "安保集团", "珠海交控", "广省智协", "广东太力", "佐登妮丝", "信银理财", "珠光汽车", "清远国投", "六盯目"];
@@ -734,7 +771,7 @@ function setSync(state, text) {
 async function pullFromGitHub(kind, silent) {
   const k = kind || page;
   const c = cfg();
-  if (!c.repo || !c.token) { if (!silent) alert("请先在「设置」里配置仓库和 Token"); return; }
+  if (!c.repo || !c.token) { if (!silent) toast("请先在「设置」里配置仓库和 Token"); return; }
   if (!silent) setSync("", "正在从 GitHub 拉取…");
   try {
     let r = await fetch(ghUrl(k) + "?ref=" + encodeURIComponent(c.branch || "main"), { headers: ghHeaders() });
@@ -764,7 +801,7 @@ async function pullFromGitHub(kind, silent) {
 
 async function pushToGitHub() {
   const c = cfg();
-  if (!c.repo || !c.token) return alert("请先在「设置」里配置仓库和 Token");
+  if (!c.repo || !c.token) return toast("请先在「设置」里配置仓库和 Token");
   setSync("", "正在保存到 GitHub…");
   try {
     let sha;
@@ -788,6 +825,34 @@ function typeBadge(t) {
   return `<span class="badge t${i >= 0 ? i + 1 : 4}">${esc(t)}</span>`;
 }
 function esc(s) { return String(s ?? "").replace(/[&<>"']/g, m => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m])); }
+
+/* ---------- 自绘确认框 & 轻提示 ----------
+   内置浏览器（以及部分嵌入式 WebView）不会弹原生 confirm/alert，调用直接返回 false，
+   表现为「点了没反应」。所以统一改用自己的弹窗。 */
+let confirmResolve = null;
+function uiConfirm(text, title, okText) {
+  document.getElementById("confirmTitle").textContent = title || "确认操作";
+  document.getElementById("confirmText").textContent = text || "";
+  document.getElementById("confirmOk").textContent = okText || "确定";
+  document.getElementById("confirmMask").classList.add("show");
+  return new Promise(res => { confirmResolve = res; });
+}
+function confirmAnswer(v) {
+  document.getElementById("confirmMask").classList.remove("show");
+  const r = confirmResolve; confirmResolve = null;
+  if (r) r(v);
+}
+
+let toastTimer = null;
+function toast(text, kind) {
+  const el = document.getElementById("toastBar");
+  if (!el) return;
+  el.textContent = text;
+  el.className = "toast-bar show" + (kind ? " " + kind : "");
+  clearTimeout(toastTimer);
+  /* 报错留久一点，方便看清 */
+  toastTimer = setTimeout(() => { el.className = "toast-bar" + (kind ? " " + kind : ""); }, kind === "err" ? 6500 : 3200);
+}
 
 /* 状态：优先取显式 status 字段，老数据按解决日期推断 */
 function statusOf(t) { return (t && t.status) || (t && t.solvedDate ? "已完成" : "未解决"); }
@@ -1030,7 +1095,7 @@ function reorderGo(fromSeq, toSeq) {
   return true;
 }
 function moveGo(seq, delta) {
-  if (hasGoFilter()) return alert("当前有筛选条件，顺序会看不准。\n请先点「重置筛选」再调整顺序。");
+  if (hasGoFilter()) return toast("当前有筛选条件，顺序会看不准。\n请先点「重置筛选」再调整顺序。");
   const i = golive.findIndex(g => g.seq === seq);
   const j = i + delta;
   if (i < 0 || j < 0 || j >= golive.length) return;
@@ -1039,7 +1104,7 @@ function moveGo(seq, delta) {
   saveLocal(); render();
 }
 function goDragStart(ev, seq) {
-  if (hasGoFilter()) { ev.preventDefault(); return alert("当前有筛选条件，顺序会看不准。\n请先点「重置筛选」再拖动排序。"); }
+  if (hasGoFilter()) { ev.preventDefault(); return toast("当前有筛选条件，顺序会看不准。\n请先点「重置筛选」再拖动排序。"); }
   dragSeq = seq;
   ev.dataTransfer.effectAllowed = "move";
   try { ev.dataTransfer.setData("text/plain", String(seq)); } catch (e) {}
@@ -1066,9 +1131,10 @@ function goDragEnd() {
   document.querySelectorAll("#goTbody tr").forEach(x => { x.classList.remove("dragging", "drop-target"); });
 }
 /* 按上线日期重排（同一日期保持现有相对顺序） */
-function sortGoByDate() {
-  if (hasGoFilter()) return alert("当前有筛选条件，请先点「重置筛选」再排序。");
-  if (!confirm("按「上线日期」从早到晚重排全部记录？\n（日期为空的排到最后）")) return;
+async function sortGoByDate() {
+  if (hasGoFilter()) return toast("当前有筛选条件，请先点「重置筛选」再排序。");
+  const ok = await uiConfirm("全部记录将按「上线日期」从早到晚重新排列，日期为空的排到最后。", "确定按日期重排？", "重排");
+  if (!ok) return;
   golive.sort((a, b) => (a.date || "9999").localeCompare(b.date || "9999"));
   saveLocal(); render();
 }
@@ -1092,7 +1158,7 @@ function closeGoEdit() { document.getElementById("goMask").classList.remove("sho
 
 function saveGoEdit() {
   const ent = document.getElementById("gEnt").value.trim();
-  if (!ent) return alert("企业名称为必填项");
+  if (!ent) return toast("企业名称为必填项");
   const data = {
     ent,
     bank: document.getElementById("gBank").value.trim(),
@@ -1104,7 +1170,7 @@ function saveGoEdit() {
   };
   if (goEditingId) {
     const rec = golive.find(g => g.seq === goEditingId) || golive.find(g => String(g.seq) === String(goEditingId));
-    if (!rec) return alert("未找到要编辑的记录（序号 " + goEditingId + "），请刷新页面后重试");
+    if (!rec) return toast("未找到要编辑的记录（序号 " + goEditingId + "），请刷新页面后重试");
     Object.assign(rec, data);
   }
   else golive.push({ seq: nextGoSeq(), ...data });
@@ -1112,12 +1178,14 @@ function saveGoEdit() {
   saveLocal(); render(); closeGoEdit();
 }
 
-function delGo(seq) {
+async function delGo(seq) {
   const g = golive.find(x => x.seq === seq) || golive.find(x => String(x.seq) === String(seq));
-  if (!g) return;
-  if (!confirm(`确定删除上线记录 #${g.seq}？\n${g.ent}${g.bank ? " · " + g.bank : ""}`)) return;
+  if (!g) return toast("未找到该记录，请刷新页面后重试", "err");
+  const ok = await uiConfirm(`#${g.seq}　${g.ent || ""}${g.bank ? " · " + g.bank : ""}`, "确定删除这条上线记录？", "删除");
+  if (!ok) return;
   golive = golive.filter(x => String(x.seq) !== String(g.seq));
   saveLocal(); render();
+  toast(`已删除上线记录 #${g.seq}`);
 }
 
 /* ---------- Excel 导入上线记录 ---------- */
@@ -1133,7 +1201,7 @@ function importGoExcel(input) {
   const s = document.createElement("script");
   s.src = "https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js";
   s.onload = () => doGoImport(file);
-  s.onerror = () => { xlsxLoading = false; alert("Excel 解析库加载失败，请检查网络后重试"); };
+  s.onerror = () => { xlsxLoading = false; toast("Excel 解析库加载失败，请检查网络后重试"); };
   document.head.appendChild(s);
 }
 
@@ -1157,7 +1225,7 @@ async function doGoImport(file) {
     const wb = XLSX.read(buf, { cellDates: true });
     const ws = wb.Sheets[wb.SheetNames[0]];
     const rows = XLSX.utils.sheet_to_json(ws, { defval: "" });
-    if (!rows.length) return alert("Excel 第一个 sheet 没有读到数据行");
+    if (!rows.length) return toast("Excel 第一个 sheet 没有读到数据行");
     const keys = Object.keys(rows[0]).map(k => ({ raw: k, name: String(k).trim() }));
     const alias = {
       seq:  ["序号"],
@@ -1175,7 +1243,7 @@ async function doGoImport(file) {
       col[f] = hit ? hit.raw : null;
     }
     if (!col.ent && !col.bank) {
-      return alert("没有识别到「企业名称」或「银行名称」列。\n表头有：" + keys.map(k => k.name).join("、"));
+      return toast("没有识别到「企业名称」或「银行名称」列。\n表头有：" + keys.map(k => k.name).join("、"));
     }
     const get = (r, f) => col[f] ? normGoVal(r[col[f]]) : "";
     /* 匹配索引：企业|银行|模式 → 已有记录（用于补充缺失字段而不产生重复） */
@@ -1213,8 +1281,8 @@ async function doGoImport(file) {
     });
     /* 保持现有行顺序，新导入的追加在后面，不打乱手工排序 */
     saveLocal(); render();
-    alert(`导入完成：新增 ${added} 条，补充已有记录 ${updated} 处，跳过（重复/空行）${skipped} 条\n使用列：${Object.entries(col).filter(([, v]) => v).map(([f, v]) => f + "←" + v).join("，")}`);
-  } catch (e) { alert("导入失败：" + e.message); }
+    toast(`导入完成：新增 ${added} 条，补充已有记录 ${updated} 处，跳过（重复/空行）${skipped} 条\n使用列：${Object.entries(col).filter(([, v]) => v).map(([f, v]) => f + "←" + v).join("，")}`);
+  } catch (e) { toast("导入失败：" + e.message); }
 }
 
 function exportGoCsv() {
@@ -1301,7 +1369,7 @@ function closeKbEdit() { document.getElementById("kbMask").classList.remove("sho
 
 function saveKbEdit() {
   const title = document.getElementById("kTitle").value.trim();
-  if (!title) return alert("标题/问题为必填项");
+  if (!title) return toast("标题/问题为必填项");
   const data = {
     cat: document.getElementById("kCat").value,
     date: document.getElementById("kDate").value || "",
@@ -1315,12 +1383,14 @@ function saveKbEdit() {
   saveLocal(); render(); closeKbEdit();
 }
 
-function delKb(seq) {
+async function delKb(seq) {
   const g = kb.find(x => x.seq === seq) || kb.find(x => String(x.seq) === String(seq));
-  if (!g) return alert("未找到该条目，请刷新页面后重试");
-  if (!confirm(`确定删除知识条目 #${g.seq}？\n${(g.title || "").slice(0, 40)}`)) return;
+  if (!g) return toast("未找到该条目，请刷新页面后重试", "err");
+  const ok = await uiConfirm(`#${g.seq}　${(g.title || "（无标题）").slice(0, 50)}`, "确定删除这条知识条目？", "删除");
+  if (!ok) return;
   kb = kb.filter(x => String(x.seq) !== String(g.seq));
   saveLocal(); render();
+  toast(`已删除知识条目 #${g.seq}`);
 }
 
 function openKbView(seq) {
@@ -1443,7 +1513,7 @@ function saveEdit() {
   let type = document.getElementById("fType").value;
   if (type === "__other") type = prompt("输入自定义任务类型：") || "";
   const desc = document.getElementById("fDesc").value.trim();
-  if (!date || !type || !desc) return alert("提出日期、任务类型、任务描述为必填项");
+  if (!date || !type || !desc) return toast("提出日期、任务类型、任务描述为必填项");
   let solvedDate = document.getElementById("fSolved").value || "";
   const status = document.getElementById("fStatus").value;
   /* 状态与解决日期保持一致，但以「状态」为准：
@@ -1473,13 +1543,15 @@ function saveEdit() {
   if (cfg().autoPush) pushToGitHub();
 }
 
-function delTask(seq) {
+async function delTask(seq) {
   const t = tasks.find(x => x.seq === seq) || tasks.find(x => String(x.seq) === String(seq));
-  if (!t) return alert("未找到该记录，请刷新页面后重试");
-  if (!confirm(`确定删除任务 #${t.seq}？\n${(t.desc || "").slice(0, 40)}…`)) return;
+  if (!t) return toast("未找到该记录，请刷新页面后重试", "err");
+  const ok = await uiConfirm(`任务 #${t.seq}：${(t.desc || "（无描述）").slice(0, 60)}`, "确定删除这条任务？", "删除");
+  if (!ok) return;
   /* 用字符串比较，避免 seq 是文本型时删不掉 */
   tasks = tasks.filter(x => String(x.seq) !== String(t.seq));
   saveLocal(); render();
+  toast(`已删除任务 #${t.seq}`);
 }
 
 /* ---------- 详情查看 ---------- */
@@ -1531,7 +1603,7 @@ function trailOf(t) { if (!Array.isArray(t.trail)) t.trail = []; return t.trail;
 
 function openTrail(seq) {
   const t = tasks.find(x => x.seq === seq);
-  if (!t) return alert("未找到该任务，请刷新页面重试");
+  if (!t) return toast("未找到该任务，请刷新页面重试");
   trailSeq = seq;
   document.getElementById("trailTitle").textContent = `任务链路 #${t.seq}`;
   document.getElementById("trailHead").innerHTML =
@@ -1564,7 +1636,7 @@ function addTrailEntry() {
   const t = tasks.find(x => x.seq === trailSeq);
   if (!t) return;
   const text = document.getElementById("trailText").value.trim();
-  if (!text) return alert("请输入进展或卡点说明");
+  if (!text) return toast("请输入进展或卡点说明");
   const kind = document.getElementById("trailKind").value;
   const tr = trailOf(t);
   /* 新增卡点时，自动把上一条未解除的卡点标记为已解除 */
@@ -1577,9 +1649,11 @@ function addTrailEntry() {
   render();
 }
 
-function delTrailEntry(i) {
+async function delTrailEntry(i) {
   const t = tasks.find(x => x.seq === trailSeq);
-  if (!t || !confirm("删除这条链路记录？")) return;
+  if (!t) return;
+  const ok = await uiConfirm("该条链路记录将被移除，不影响任务本身。", "确定删除这条链路记录？", "删除");
+  if (!ok) return;
   trailOf(t).splice(i, 1);
   saveLocal(); renderTrail(); render();
 }
@@ -1610,17 +1684,17 @@ function addAtt(field, input) {
       if (f.type.startsWith("image/")) {
         data = await compressImage(f);
       } else {
-        if (f.size > ATT_MAX) return alert(`「${f.name}」超过 600KB，已跳过（截图会自动压缩，非图片文件请控制在 600KB 内）`);
+        if (f.size > ATT_MAX) return toast(`「${f.name}」超过 600KB，已跳过（截图会自动压缩，非图片文件请控制在 600KB 内）`);
         data = await new Promise((res, rej) => {
           const r = new FileReader();
           r.onload = () => res(r.result); r.onerror = rej;
           r.readAsDataURL(f);
         });
       }
-      if (data.length > ATT_MAX * 1.4) return alert(`「${f.name}」压缩后仍较大，已跳过`);
+      if (data.length > ATT_MAX * 1.4) return toast(`「${f.name}」压缩后仍较大，已跳过`);
       editAtt[field].push({ name: f.name, mime: f.type || "application/octet-stream", data });
       renderAttLists();
-    } catch { alert(`「${f.name}」读取失败，已跳过`); }
+    } catch { toast(`「${f.name}」读取失败，已跳过`); }
   });
 }
 
@@ -1717,8 +1791,8 @@ function importJson(input) {
       arr.forEach(t => { if (!seqs.has(t.seq)) { tasks.push(t); added++; } });
       tasks.sort((a, b) => a.seq - b.seq);
       saveLocal(); render();
-      alert(`导入完成，新增 ${added} 条`);
-    } catch (e) { alert("导入失败：" + e.message); }
+      toast(`导入完成，新增 ${added} 条`);
+    } catch (e) { toast("导入失败：" + e.message); }
   };
   r.readAsText(file, "utf-8");
   input.value = "";
