@@ -518,7 +518,7 @@ function typeBadge(t) {
 function esc(s) { return String(s ?? "").replace(/[&<>"']/g, m => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m])); }
 
 /* 状态：优先取显式 status 字段，老数据按解决日期推断 */
-function statusOf(t) { return t.status || (t.solvedDate ? "已完成" : "未解决"); }
+function statusOf(t) { return (t && t.status) || (t && t.solvedDate ? "已完成" : "未解决"); }
 function statusBadge(t) {
   return statusOf(t) === "已完成"
     ? '<span class="badge done">已完成</span>'
