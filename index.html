@@ -764,7 +764,7 @@ async function doGoImport(file) {
       ent:  ["企业名称", "企业", "客户名称", "单位名称", "企业名"],
       bank: ["银行名称", "银行", "开户银行", "上线银行"],
       mode: ["直联模式", "接入模式", "对接模式", "模式"],
-      date: ["上线日期", "上线时间", "日期"],
+      date: ["上线日期", "上线时间", "接入时间", "接入日期", "日期"],
       city: ["城市", "所在地", "所在城市"],
       impl: ["实施人员", "实施", "实施人", "实施负责人"],
       mgr:  ["客户经理", "客户经理姓名", "经理"],
@@ -778,9 +778,15 @@ async function doGoImport(file) {
       return alert("没有识别到「企业名称」或「银行名称」列。\n表头有：" + keys.map(k => k.name).join("、"));
     }
     const get = (r, f) => col[f] ? normGoVal(r[col[f]]) : "";
+    /* 匹配索引：企业|银行|模式 → 已有记录（用于补充缺失字段而不产生重复） */
+    const byCore = new Map();
+    golive.forEach(g => {
+      const k = [g.ent, g.bank, g.mode].join("|");
+      if (!byCore.has(k)) byCore.set(k, g);
+    });
     const exist = new Set(golive.map(g => [g.ent, g.bank, g.mode, g.date].join("|")));
     let maxSeq = golive.reduce((m, g) => Math.max(m, g.seq), 0);
-    let added = 0, skipped = 0;
+    let added = 0, skipped = 0, updated = 0;
     rows.forEach(r => {
       const rec = {
         seq: parseInt(get(r, "seq")) || 0,
@@ -790,13 +796,24 @@ async function doGoImport(file) {
       if (!rec.ent && !rec.bank) { skipped++; return; }
       const key = [rec.ent, rec.bank, rec.mode, rec.date].join("|");
       if (exist.has(key)) { skipped++; return; }
+      /* 企业+银行+模式相同：视为同一条记录，补充已有记录缺失的字段 */
+      const core = [rec.ent, rec.bank, rec.mode].join("|");
+      const old = byCore.get(core);
+      if (old) {
+        ["date", "city", "impl", "mgr", "bank"].forEach(f => {
+          if (!old[f] && rec[f]) { old[f] = rec[f]; updated++; }
+        });
+        exist.add(key);
+        return;
+      }
       exist.add(key);
+      byCore.set(core, rec);
       if (!rec.seq) rec.seq = ++maxSeq;
       golive.push(rec); added++;
     });
     golive.sort((a, b) => a.seq - b.seq);
     saveLocal(); render();
-    alert(`导入完成：新增 ${added} 条，跳过（重复/空行）${skipped} 条\n使用列：${Object.entries(col).filter(([, v]) => v).map(([f, v]) => f + "←" + v).join("，")}`);
+    alert(`导入完成：新增 ${added} 条，补充已有记录 ${updated} 处，跳过（重复/空行）${skipped} 条\n使用列：${Object.entries(col).filter(([, v]) => v).map(([f, v]) => f + "←" + v).join("，")}`);
   } catch (e) { alert("导入失败：" + e.message); }
 }
 
