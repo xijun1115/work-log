@@ -111,7 +111,7 @@
         <th style="width:46px">序号</th><th style="width:100px">提出日期</th>
         <th style="width:110px">任务类型</th><th style="width:110px">客户名称</th><th style="min-width:200px">任务描述</th>
         <th style="min-width:160px">问题原因</th><th style="min-width:160px">解决方案</th>
-        <th style="width:100px">解决日期</th><th style="width:110px">备注</th><th style="width:90px">操作</th>
+        <th style="width:100px">解决日期</th><th style="width:90px">处理人</th><th style="width:110px">备注</th><th style="width:90px">操作</th>
       </tr>
     </thead>
     <tbody id="tbody"></tbody>
@@ -253,7 +253,7 @@ function render() {
     if (ft && t.type !== ft) return false;
     if (fs === "undone" && t.solvedDate) return false;
     if (fs === "solved" && !t.solvedDate) return false;
-    if (kw && ![t.desc, t.cause, t.solution, t.note, t.customer].join(" ").toLowerCase().includes(kw)) return false;
+    if (kw && ![t.desc, t.cause, t.solution, t.note, t.customer, t.handler].join(" ").toLowerCase().includes(kw)) return false;
     return true;
   });
   const tb = document.getElementById("tbody");
@@ -274,13 +274,20 @@ function render() {
         <button class="danger-link" onclick="delTask(${t.seq})">删除</button>
       </td>
     </tr>`).join("")
-    : `<tr><td colspan="10" class="empty-tip">暂无记录，点右上角「＋ 新增任务」开始</td></tr>`;
+    : `<tr><td colspan="11" class="empty-tip">暂无记录，点右上角「＋ 新增任务」开始</td></tr>`;
 
   const undone = tasks.filter(t => !t.solvedDate).length;
   document.getElementById("stats").innerHTML =
     `共 ${tasks.length} 条 · <b class="undone">未解决 ${undone}</b> · 已解决 ${tasks.length - undone}`;
   bindInlineEdit();
   refreshCustomerList();
+  refreshHandlerList();
+}
+
+function refreshHandlerList() {
+  const used = tasks.map(t => t.handler).filter(Boolean);
+  const all = [...new Set(["锡君", ...used])];
+  document.getElementById("handlerList").innerHTML = all.map(c => `<option value="${esc(c)}">`).join("");
 }
 
 function refreshCustomerList() {
@@ -327,6 +334,7 @@ function openEdit(seq) {
   document.getElementById("fCause").value = t?.cause || "";
   document.getElementById("fSolution").value = t?.solution || "";
   document.getElementById("fSolved").value = t?.solvedDate || "";
+  document.getElementById("fHandler").value = t?.handler || "";
   document.getElementById("fNote").value = t?.note || "";
   document.getElementById("editMask").classList.add("show");
 }
@@ -393,9 +401,9 @@ function download(name, content, mime) {
   a.download = name; a.click(); URL.revokeObjectURL(a.href);
 }
 function exportCsv() {
-  const head = ["序号", "任务提出日期", "任务类型", "客户名称", "任务描述", "问题原因", "解决方案", "解决日期", "备注"];
+  const head = ["序号", "任务提出日期", "任务类型", "客户名称", "任务描述", "问题原因", "解决方案", "解决日期", "处理人", "备注"];
   const lines = [head];
-  tasks.forEach(t => lines.push([t.seq, t.date, t.type, t.customer, t.desc, t.cause, t.solution, t.solvedDate, t.note]));
+  tasks.forEach(t => lines.push([t.seq, t.date, t.type, t.customer, t.desc, t.cause, t.solution, t.solvedDate, t.handler, t.note]));
   const csv = "\uFEFF" + lines.map(r => r.map(v => `"${String(v ?? "").replace(/"/g, '""')}"`).join(",")).join("\r\n");
   download(`工作任务记录_${new Date().toISOString().slice(0, 10)}.csv`, csv, "text/csv;charset=utf-8");
 }
