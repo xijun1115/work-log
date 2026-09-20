@@ -218,6 +218,37 @@
   tr.undone:hover td { background: color-mix(in srgb, var(--warn-bg) 82%, var(--warn-border)); }
   tr.undone td:first-child { background: var(--warn-bg); box-shadow: inset 3px 0 0 0 var(--warn-border); }
 
+  /* ---------- 批量选择 ---------- */
+  td.pick-cell { white-space: nowrap; }
+  input.pick, input.pick-all {
+    width: 15px; height: 15px; accent-color: var(--primary);
+    cursor: pointer; vertical-align: -2px; margin-right: 7px;
+  }
+  /* 勾选中的行高亮（放在 .undone 之后，保证优先级更高） */
+  tbody tr.picked td { background: color-mix(in srgb, var(--primary-soft) 65%, transparent); }
+  tbody tr.picked:hover td { background: var(--primary-soft); }
+
+  .bulk-bar {
+    display: none; align-items: center; gap: 10px; flex-wrap: wrap; flex: 0 0 auto;
+    margin: 10px 0 2px; padding: 8px 12px; font-size: 13px;
+    border-radius: var(--radius); background: var(--primary-soft);
+    border: 1px solid color-mix(in srgb, var(--primary) 45%, var(--border));
+  }
+  .bulk-bar.show { display: flex; }
+  .bulk-count b { color: var(--primary); font-size: 15px; font-variant-numeric: tabular-nums; }
+  .bulk-tip { color: var(--muted); font-size: 12px; }
+  .bulk-bar .spacer { flex: 1 1 auto; }
+
+  /* 批量删除的二次确认输入框 */
+  .cf-input-wrap { display: none; margin-top: 12px; }
+  .cf-input-wrap .cf-label { font-size: 13px; color: var(--text); margin-bottom: 6px; }
+  .cf-input-wrap .cf-label b { color: var(--danger); font-size: 15px; }
+  .cf-input-wrap input {
+    width: 100%; padding: 8px 11px; font: inherit; color: var(--text);
+    border: 1px solid var(--border-strong); border-radius: 8px; background: var(--card);
+  }
+  .cf-input-wrap input:focus { outline: 2px solid var(--primary-soft); border-color: var(--primary); }
+
   /* ---------- 徽章 ---------- */
   .badge {
     display: inline-block; padding: 2px 9px; border-radius: 999px;
@@ -427,6 +458,14 @@
     <button class="ghost" style="padding:2px 8px;font-size:12px;" onclick="pushToGitHub()">保存到 GitHub</button>
   </div>
 
+  <div class="bulk-bar" id="bulkTask">
+    <span class="bulk-count">已选 <b>0</b> 条任务</span>
+    <button class="ghost" style="padding:4px 10px;font-size:12.5px" onclick="clearSel()">取消选择</button>
+    <button class="danger" style="padding:4px 12px;font-size:12.5px" onclick="bulkDelete()">删除所选</button>
+    <span class="spacer"></span>
+    <span class="bulk-tip">删除后无法恢复，重要数据请先「导出 CSV」备份</span>
+  </div>
+
   <div class="table-wrap"><table>
     <thead>
       <tr id="theadRow"></tr>
@@ -473,6 +512,14 @@
     <button class="ghost" style="padding:2px 8px;font-size:12px;" onclick="pushToGitHub()">保存到 GitHub</button>
   </div>
 
+  <div class="bulk-bar" id="bulkGo">
+    <span class="bulk-count">已选 <b>0</b> 条上线记录</span>
+    <button class="ghost" style="padding:4px 10px;font-size:12.5px" onclick="clearSel()">取消选择</button>
+    <button class="danger" style="padding:4px 12px;font-size:12.5px" onclick="bulkDelete()">删除所选</button>
+    <span class="spacer"></span>
+    <span class="bulk-tip">删除后无法恢复，重要数据请先「导出 CSV」备份</span>
+  </div>
+
   <div class="table-wrap"><table>
     <thead>
       <tr id="goTheadRow"></tr>
@@ -498,6 +545,14 @@
     <span class="dot" id="kbSyncDot"></span><span id="kbSyncText">本地模式（未配置 GitHub）</span>
     <button class="ghost" style="padding:2px 8px;font-size:12px;" onclick="pullFromGitHub()">从 GitHub 拉取</button>
     <button class="ghost" style="padding:2px 8px;font-size:12px;" onclick="pushToGitHub()">保存到 GitHub</button>
+  </div>
+
+  <div class="bulk-bar" id="bulkKb">
+    <span class="bulk-count">已选 <b>0</b> 条知识条目</span>
+    <button class="ghost" style="padding:4px 10px;font-size:12.5px" onclick="clearSel()">取消选择</button>
+    <button class="danger" style="padding:4px 12px;font-size:12.5px" onclick="bulkDelete()">删除所选</button>
+    <span class="spacer"></span>
+    <span class="bulk-tip">删除后无法恢复</span>
   </div>
 
   <div class="table-wrap"><table>
@@ -655,6 +710,11 @@
   <div class="modal">
     <h2><span class="cf-icon">⚠️</span><span id="confirmTitle">确认操作</span></h2>
     <div class="cf-text" id="confirmText"></div>
+    <div class="cf-input-wrap" id="cfInputWrap">
+      <div class="cf-label" id="cfInputLabel"></div>
+      <input type="text" id="cfInput" autocomplete="off" placeholder="在此输入数字"
+             onkeydown="if(event.key==='Enter')confirmAnswer(true)">
+    </div>
     <div class="modal-foot">
       <button onclick="confirmAnswer(false)">取消</button>
       <button class="danger" id="confirmOk" onclick="confirmAnswer(true)">确定</button>
@@ -876,15 +936,39 @@ function esc(s) { return String(s ?? "").replace(/[&<>"']/g, m => ({ "&": "&amp;
    内置浏览器（以及部分嵌入式 WebView）不会弹原生 confirm/alert，调用直接返回 false，
    表现为「点了没反应」。所以统一改用自己的弹窗。 */
 let confirmResolve = null;
-function uiConfirm(text, title, okText) {
+let confirmRequire = null;   /* 非空时，必须手动输入这个数字才允许点确定（批量删除用） */
+function uiConfirm(text, title, okText, require) {
   document.getElementById("confirmTitle").textContent = title || "确认操作";
   document.getElementById("confirmText").textContent = text || "";
   document.getElementById("confirmOk").textContent = okText || "确定";
+  const wrap = document.getElementById("cfInputWrap");
+  const inp = document.getElementById("cfInput");
+  confirmRequire = require == null ? null : String(require);
+  if (confirmRequire !== null) {
+    wrap.style.display = "block";
+    document.getElementById("cfInputLabel").innerHTML =
+      `这是<b>不可恢复</b>的操作。请输入 <b>${esc(confirmRequire)}</b> 确认删除条数：`;
+    inp.value = "";
+    setTimeout(() => inp.focus(), 40);
+  } else {
+    wrap.style.display = "none";
+    inp.value = "";
+  }
   document.getElementById("confirmMask").classList.add("show");
   return new Promise(res => { confirmResolve = res; });
 }
 function confirmAnswer(v) {
+  /* 需要手输校验时：数字对不上就不关闭弹窗，避免手滑批量删库 */
+  if (v && confirmRequire !== null) {
+    const inp = document.getElementById("cfInput");
+    if (inp.value.trim() !== confirmRequire) {
+      toast("输入的数字不一致，已阻止本次删除", "err");
+      inp.value = ""; inp.focus();
+      return;
+    }
+  }
   document.getElementById("confirmMask").classList.remove("show");
+  confirmRequire = null;
   const r = confirmResolve; confirmResolve = null;
   if (r) r(v);
 }
@@ -939,6 +1023,91 @@ function hit(val, f) {
   if (!s) return true;
   const v = String(val ?? "");
   return v === s || v.toLowerCase().includes(s.toLowerCase());
+}
+
+/* ---------- 批量选择 / 批量删除 ---------- */
+/* 每个页面一套独立的勾选集合，存 seq 的字符串形式（避免数字/文本类型不一致） */
+const sel = { task: new Set(), go: new Set(), kb: new Set() };
+const BULK_BAR = { task: "bulkTask", go: "bulkGo", kb: "bulkKb" };
+const BULK_LABEL = { task: "任务", go: "上线记录", kb: "知识条目" };
+
+/* 行首勾选框：渲染时按当前勾选集合回填状态 */
+function pickBox(s) {
+  const on = sel[page].has(String(s)) ? " checked" : "";
+  return `<input type="checkbox" class="pick" data-seq="${esc(s)}"${on}`
+       + ` onchange="togglePick(this.dataset.seq, this.checked, this)" title="选中这一行（可勾选多行后批量删除）">`;
+}
+/* 表头的全选框：只作用于当前筛选出来的行 */
+const pickAllBox = `<input type="checkbox" class="pick-all" onchange="toggleAll(this.checked)" title="全选 / 取消全选（仅当前筛选结果）">`;
+
+function togglePick(seq, checked, el) {
+  const key = String(seq);
+  checked ? sel[page].add(key) : sel[page].delete(key);
+  const tr = el && el.closest("tr");
+  if (tr) tr.classList.toggle("picked", checked);
+  renderBulkBar();
+}
+function toggleAll(checked) {
+  const body = document.getElementById(PAGES[page].body);
+  if (!body) return;
+  body.querySelectorAll("tbody input.pick").forEach(cb => {
+    cb.checked = checked;
+    const k = String(cb.dataset.seq);
+    checked ? sel[page].add(k) : sel[page].delete(k);
+    const tr = cb.closest("tr");
+    if (tr) tr.classList.toggle("picked", checked);
+  });
+  renderBulkBar();
+}
+function clearSel() { sel[page].clear(); render(); }
+
+/* 汇总条：只统计「当前筛选后仍然看得见」的行，防止看不见的记录被一起删掉 */
+function renderBulkBar() {
+  for (const p of Object.keys(PAGES)) {
+    const bar = document.getElementById(BULK_BAR[p]);
+    const body = document.getElementById(PAGES[p].body);
+    if (!bar || !body) continue;
+    const boxes = [...body.querySelectorAll("tbody input.pick")];
+    const visible = new Set(boxes.map(cb => String(cb.dataset.seq)));
+    [...sel[p]].forEach(k => { if (!visible.has(k)) sel[p].delete(k); });
+    const n = sel[p].size;
+    bar.classList.toggle("show", n > 0);
+    const c = bar.querySelector(".bulk-count b");
+    if (c) c.textContent = n;
+    const all = body.querySelector("thead input.pick-all");
+    if (all) {
+      all.checked = boxes.length > 0 && n === boxes.length;
+      all.indeterminate = n > 0 && n < boxes.length;
+    }
+  }
+  requestAnimationFrame(fitScroll);
+}
+
+async function bulkDelete() {
+  const keys = new Set(sel[page]);
+  const picked = D().filter(x => keys.has(String(x.seq)));
+  if (!picked.length) return toast("还没有勾选任何记录", "warn");
+  const n = picked.length;
+  const label = BULK_LABEL[page];
+  const nameOf = x => x.desc || x.ent || x.title || "";
+  const preview = picked.slice(0, 5)
+    .map(x => `· #${x.seq}　${String(nameOf(x)).slice(0, 26)}`)
+    .join("\n") + (n > 5 ? `\n· 以及其他 ${n - 5} 条` : "");
+  const ok = await uiConfirm(
+    `即将删除 ${n} 条${label}：\n${preview}\n\n删除后无法恢复（本地缓存和 GitHub 云端会一并删除）。`,
+    `危险操作：批量删除 ${n} 条${label}`,
+    `删除 ${n} 条`,
+    n
+  );
+  if (!ok) return;
+  const next = D().filter(x => !keys.has(String(x.seq)));
+  if (page === "task") tasks = next;
+  else if (page === "go") golive = next;
+  else kb = next;
+  sel[page].clear();
+  saveLocal(); render();
+  toast(`已删除 ${n} 条${label}`);
+  if (cfg().autoPush) pushToGitHub();
 }
 
 /* 单元格渲染器：按列 key 输出 td */
@@ -1011,11 +1180,11 @@ function renderTask() {
   });
   const vis = COLS.filter(c => visibleCols.has(c.key));
   document.getElementById("theadRow").innerHTML =
-    `<th style="width:46px">序号</th>` + vis.map(c => `<th style="${c.w}">${c.label}</th>`).join("") + `<th style="width:158px">操作</th>`;
+    `<th class="pick-cell" style="width:76px">${pickAllBox}序号</th>` + vis.map(c => `<th style="${c.w}">${c.label}</th>`).join("") + `<th style="width:158px">操作</th>`;
   const tb = document.getElementById("tbody");
   tb.innerHTML = rows.length ? rows.map(t => `
-    <tr class="${statusOf(t) === "已完成" ? "" : "undone"}" data-seq="${t.seq}">
-      <td class="seq">${t.seq}</td>
+    <tr class="${statusOf(t) === "已完成" ? "" : "undone"}${sel.task.has(String(t.seq)) ? " picked" : ""}" data-seq="${t.seq}">
+      <td class="seq pick-cell">${pickBox(t.seq)}${t.seq}</td>
       ${vis.map(c => cellHtml(t, c.key)).join("")}
       <td class="actions">
         <button class="ghost" style="padding:2px 8px;font-size:12px" onclick="openTrail(${t.seq})">链路</button>
@@ -1038,6 +1207,7 @@ function renderTask() {
     (rows.length !== tasks.length ? ` · <b style="color:var(--primary)">🔍 筛选出 ${rows.length} 条</b>` : "");
   fillFilter("filterCustomer", "全部客户", [...new Set(tasks.map(t => t.customer).filter(Boolean))].sort());
   fillFilter("filterHandler", "全部处理人", [...new Set(tasks.map(t => t.handler).filter(Boolean))]);
+  renderBulkBar();
   bindInlineEdit();
   refreshCustomerList();
   refreshHandlerList();
@@ -1078,12 +1248,12 @@ function renderGo() {
   const noFilter = rows.length === golive.length;
   const pos = new Map(golive.map((g, i) => [g.seq, i + 1]));
   document.getElementById("goTheadRow").innerHTML =
-    `<th style="width:66px">序号</th>` + GOCOLS.map(c => `<th style="${c.w}">${c.label}</th>`).join("") + `<th style="width:172px">操作</th>`;
+    `<th class="pick-cell" style="width:100px">${pickAllBox}序号</th>` + GOCOLS.map(c => `<th style="${c.w}">${c.label}</th>`).join("") + `<th style="width:172px">操作</th>`;
   document.getElementById("goTbody").innerHTML = rows.length ? rows.map(g => `
-    <tr data-seq="${g.seq}" class="draggable-row" draggable="true"
+    <tr data-seq="${g.seq}" class="draggable-row${sel.go.has(String(g.seq)) ? " picked" : ""}" draggable="true"
         ondragstart="goDragStart(event, ${g.seq})" ondragover="goDragOver(event, ${g.seq})"
         ondrop="goDrop(event, ${g.seq})" ondragend="goDragEnd()">
-      <td class="seq" title="按住拖动可调整顺序"><span class="drag-handle">⠿</span>${pos.get(g.seq)}</td>
+      <td class="seq pick-cell" title="按住拖动可调整顺序">${pickBox(g.seq)}<span class="drag-handle">⠿</span>${pos.get(g.seq)}</td>
       ${GOCOLS.map(c => goCellHtml(g, c.key)).join("")}
       <td class="actions">
         <button class="ghost move-btn" onclick="moveGo(${g.seq}, -1)" title="上移一位">↑</button>
@@ -1107,6 +1277,7 @@ function renderGo() {
   fillFilter("goFilterCity", "全部城市", uniq("city").sort());
   fillFilter("goFilterImpl", "全部实施人员", uniq("impl"));
   fillFilter("goFilterMgr", "全部客户经理", uniq("mgr"));
+  renderBulkBar();
   bindInlineEdit();
 }
 
@@ -1376,10 +1547,10 @@ function renderKb() {
     { key: "note",    label: "备注",       w: "width:130px" },
   ];
   document.getElementById("kbTheadRow").innerHTML =
-    `<th style="width:46px">序号</th>` + KBCOLS.map(c => `<th style="${c.w}">${c.label}</th>`).join("") + `<th style="width:118px">操作</th>`;
+    `<th class="pick-cell" style="width:76px">${pickAllBox}序号</th>` + KBCOLS.map(c => `<th style="${c.w}">${c.label}</th>`).join("") + `<th style="width:118px">操作</th>`;
   document.getElementById("kbTbody").innerHTML = rows.length ? rows.map(g => `
-    <tr data-seq="${g.seq}">
-      <td class="seq">${g.seq}</td>
+    <tr data-seq="${g.seq}"${sel.kb.has(String(g.seq)) ? ' class="picked"' : ""}>
+      <td class="seq pick-cell">${pickBox(g.seq)}${g.seq}</td>
       ${KBCOLS.map(c => kbCellHtml(g, c.key)).join("")}
       <td class="actions">
         <button class="ghost" style="padding:2px 8px;font-size:12px" onclick="openKbView(${g.seq})">详情</button>
@@ -1394,6 +1565,7 @@ function renderKb() {
       }</td></tr>`;
   const faq = kb.filter(g => g.cat === "云跨行FAQ").length;
   document.getElementById("kbStats").textContent = `共 ${kb.length} 条 · 云跨行FAQ ${faq} · ERP对接 ${kb.length - faq}`;
+  renderBulkBar();
   bindInlineEdit();
 }
 
