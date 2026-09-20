@@ -6,11 +6,17 @@
     "customer": "珠海农控",
     "desc": "民生银行直联测试",
     "cause": "",
-    "solution": "",
-    "solvedDate": "",
+    "solution": "测试已完成",
+    "solvedDate": "2026-09-20",
     "handler": "蔡宏裕",
     "note": "",
-    "trail": []
+    "trail": [],
+    "status": "已完成",
+    "att": {
+      "desc": [],
+      "cause": [],
+      "solution": []
+    }
   },
   {
     "seq": 2,
@@ -19,8 +25,8 @@
     "customer": "珠海交控",
     "desc": "招商银行直联测试",
     "cause": "",
-    "solution": "",
-    "solvedDate": "",
+    "solution": "已提供测试报告",
+    "solvedDate": "2026-09-18",
     "handler": "李金文",
     "note": "",
     "trail": [
@@ -29,7 +35,13 @@
         "kind": "进展",
         "text": "待总行开通访问招行的网络"
       }
-    ]
+    ],
+    "status": "已完成",
+    "att": {
+      "desc": [],
+      "cause": [],
+      "solution": []
+    }
   },
   {
     "seq": 3,
@@ -56,9 +68,9 @@
     "customer": "海纳人力",
     "desc": "招商银行直联测试",
     "cause": "",
-    "solution": "",
-    "solvedDate": "",
-    "status": "未解决",
+    "solution": "测试完成，已提交测试报告",
+    "solvedDate": "2026-09-20",
+    "status": "已完成",
     "att": {
       "desc": [],
       "cause": [],
@@ -309,9 +321,9 @@
     "customer": "广东太力",
     "desc": "工商银行直联测试",
     "cause": "",
-    "solution": "",
-    "solvedDate": "",
-    "status": "未解决",
+    "solution": "1、安装工行NC直联机\n2、启动U2通信客户端，与工行已连通，提供给北研联调外币接口",
+    "solvedDate": "2026-09-20",
+    "status": "已完成",
     "att": {
       "desc": [],
       "cause": [],
@@ -335,8 +347,8 @@
     "desc": "代发功能新增一个二级复核人员 郑少凤",
     "cause": "",
     "solution": "1、绑定并激活网银key；\n2、设置代发录入的任务流程，指定一级复核为 张传春，二级复核为郑少凤",
-    "solvedDate": "",
-    "status": "未解决",
+    "solvedDate": "2026-09-18",
+    "status": "已完成",
     "att": {
       "desc": [],
       "cause": [],
@@ -353,15 +365,15 @@
     "desc": "中信银行直联上线",
     "cause": "",
     "solution": "",
-    "solvedDate": "",
-    "status": "未解决",
+    "solvedDate": "2026-09-18",
+    "status": "已完成",
     "att": {
       "desc": [],
       "cause": [],
       "solution": []
     },
     "handler": "陈锡君",
-    "note": "",
+    "note": "已连通",
     "trail": [
       {
         "time": "2026-09-17 17:46",
@@ -420,15 +432,15 @@
     "desc": "航空城-中信银行直联验证",
     "cause": "",
     "solution": "",
-    "solvedDate": "",
-    "status": "未解决",
+    "solvedDate": "2026-09-18",
+    "status": "已完成",
     "att": {
       "desc": [],
       "cause": [],
       "solution": []
     },
     "handler": "陈锡君",
-    "note": ""
+    "note": "已连通"
   },
   {
     "seq": 20,
