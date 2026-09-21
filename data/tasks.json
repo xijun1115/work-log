@@ -483,5 +483,23 @@
     },
     "handler": "陈锡君",
     "note": ""
+  },
+  {
+    "seq": 22,
+    "date": "2026-09-21",
+    "type": "他行直联上线",
+    "customer": "万建建筑",
+    "desc": "南粤银行生产上线",
+    "cause": "",
+    "solution": "",
+    "solvedDate": "",
+    "status": "未解决",
+    "att": {
+      "desc": [],
+      "cause": [],
+      "solution": []
+    },
+    "handler": "李金文",
+    "note": ""
   }
 ]
