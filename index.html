@@ -209,6 +209,8 @@
   tbody tr:hover td { background: var(--hover); }
   tbody tr:last-child td { border-bottom: none; }
   td.seq { color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+  /* 日期格：日期+图标一律不折行（列宽已配套加宽） */
+  td.nowrap { white-space: nowrap; font-variant-numeric: tabular-nums; }
   td.editable { cursor: text; }
   td.editable:hover { background: var(--primary-soft) !important; }
   td .inline-input { width: 100%; min-width: 120px; font: inherit; }
@@ -738,7 +740,7 @@ const GOCOLS = [
   { key: "ent",   label: "企业名称", w: "min-width:150px" },
   { key: "bank",  label: "银行名称", w: "min-width:120px" },
   { key: "mode",  label: "直联模式", w: "width:130px" },
-  { key: "date",  label: "上线日期", w: "width:100px" },
+  { key: "date",  label: "上线日期", w: "width:128px" },
   { key: "city",  label: "城市",     w: "width:90px" },
   { key: "impl",  label: "实施人员", w: "min-width:110px" },
   { key: "mgr",   label: "客户经理", w: "min-width:110px" },
@@ -746,13 +748,13 @@ const GOCOLS = [
 
 /* 可配置显示的列（序号、操作始终显示） */
 const COLS = [
-  { key: "date",      label: "提出日期", w: "width:100px" },
+  { key: "date",      label: "提出日期", w: "width:112px" },
   { key: "type",      label: "任务类型", w: "width:110px" },
   { key: "customer",  label: "客户名称", w: "width:110px" },
   { key: "desc",      label: "任务描述", w: "min-width:200px" },
   { key: "cause",     label: "问题原因", w: "min-width:160px" },
   { key: "solution",  label: "解决方案", w: "min-width:160px" },
-  { key: "solvedDate",label: "解决日期", w: "width:100px" },
+  { key: "solvedDate",label: "解决日期", w: "width:122px" },
   { key: "status",    label: "状态",     w: "width:76px" },
   { key: "handler",   label: "处理人",   w: "width:90px" },
   { key: "note",      label: "备注",     w: "width:110px" },
@@ -1124,13 +1126,13 @@ function cellHtml(t, key) {
     return `<span class="trail-badge ok" title="最新进展：${esc(last.text).slice(0, 60)}" onclick="openTrail(${t.seq})">链路 ${tr.length}</span>`;
   };
   switch (key) {
-    case "date":      return `<td>${t.date}</td>`;
+    case "date":      return `<td class="nowrap">${t.date}</td>`;
     case "type":      return `<td>${typeBadge(t.type)}</td>`;
     case "customer":  return `<td class="editable" data-field="customer" title="双击编辑">${esc(t.customer) || dash}</td>`;
     case "desc":      return `<td class="editable" data-field="desc" title="双击编辑">${nl(t.desc)}${clip("desc")}${trailMark()}</td>`;
     case "cause":     return `<td class="editable" data-field="cause" title="双击编辑">${nl(t.cause) || dash}${clip("cause")}</td>`;
     case "solution":  return `<td class="editable" data-field="solution" title="双击编辑">${nl(t.solution) || dash}${clip("solution")}</td>`;
-    case "solvedDate":return `<td>${t.solvedDate ? `<span class="solved">✔ ${t.solvedDate}</span>` : dash}</td>`;
+    case "solvedDate":return `<td class="nowrap">${t.solvedDate ? `<span class="solved">✔ ${t.solvedDate}</span>` : dash}</td>`;
     case "status":    return `<td class="editable" data-field="status" title="双击切换状态">${statusBadge(t)}</td>`;
     case "handler":   return `<td class="editable" data-field="handler" title="双击编辑">${esc(t.handler) || dash}</td>`;
     case "note":      return `<td class="editable" data-field="note" title="双击编辑">${esc(t.note) || dash}</td>`;
@@ -1221,7 +1223,7 @@ function goCellHtml(g, key) {
     case "ent":  return `<td${ed("ent")}>${esc(g.ent) || dash}</td>`;
     case "bank": return `<td${ed("bank")}>${esc(g.bank) || dash}</td>`;
     case "mode": return `<td>${esc(g.mode) || dash}</td>`;
-    case "date": return `<td>${g.date ? `<span class="solved">🚀 ${esc(g.date)}</span>` : dash}</td>`;
+    case "date": return `<td class="nowrap">${g.date ? `<span class="solved">🚀 ${esc(g.date)}</span>` : dash}</td>`;
     case "city": return `<td${ed("city")}>${esc(g.city) || dash}</td>`;
     case "impl": return `<td${ed("impl")}>${esc(g.impl) || dash}</td>`;
     case "mgr":  return `<td${ed("mgr")}>${esc(g.mgr) || dash}</td>`;
@@ -1525,7 +1527,7 @@ function kbCellHtml(g, key) {
     case "cat":     return `<td>${catBadge(g.cat)}</td>`;
     case "title":   return `<td${ed("title")}><b>${esc(g.title) || dash}</b></td>`;
     case "content": return `<td${ed("content")}><div class="clamp">${nl(g.content) || dash}</div></td>`;
-    case "date":    return `<td>${esc(g.date) || dash}</td>`;
+    case "date":    return `<td class="nowrap">${esc(g.date) || dash}</td>`;
     case "note":    return `<td${ed("note")}>${esc(g.note) || dash}</td>`;
   }
   return "<td></td>";
@@ -1543,7 +1545,7 @@ function renderKb() {
     { key: "cat",     label: "分类",       w: "width:110px" },
     { key: "title",   label: "标题/问题",  w: "min-width:200px" },
     { key: "content", label: "内容/办法",  w: "min-width:320px" },
-    { key: "date",    label: "记录日期",   w: "width:100px" },
+    { key: "date",    label: "记录日期",   w: "width:112px" },
     { key: "note",    label: "备注",       w: "width:130px" },
   ];
   document.getElementById("kbTheadRow").innerHTML =
