@@ -500,6 +500,31 @@
       "solution": []
     },
     "handler": "李金文",
+    "note": "",
+    "trail": [
+      {
+        "time": "2026-09-21 17:46",
+        "kind": "进展",
+        "text": "登录失败，该公网IP未经授权，无法与服务平台建立连接，请向银行提交IP准入申请，"
+      }
+    ]
+  },
+  {
+    "seq": 23,
+    "date": "2026-09-21",
+    "type": "业务需求",
+    "customer": "海纳人力",
+    "desc": "对接广州银行代发接口",
+    "cause": "",
+    "solution": "1、行内代发工资srv030_salaryUpload\n2、行内代发工资结果查询srv009_transferResultInfoQuery2",
+    "solvedDate": "",
+    "status": "未解决",
+    "att": {
+      "desc": [],
+      "cause": [],
+      "solution": []
+    },
+    "handler": "蔡宏裕",
     "note": ""
   }
 ]
