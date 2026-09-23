@@ -526,5 +526,41 @@
     },
     "handler": "蔡宏裕",
     "note": ""
+  },
+  {
+    "seq": 24,
+    "date": "2026-09-22",
+    "type": "他行直联上线",
+    "customer": "南博教育",
+    "desc": "中国银行生产上线",
+    "cause": "",
+    "solution": "",
+    "solvedDate": "",
+    "status": "未解决",
+    "att": {
+      "desc": [],
+      "cause": [],
+      "solution": []
+    },
+    "handler": "蔡宏裕",
+    "note": ""
+  },
+  {
+    "seq": 25,
+    "date": "2026-09-22",
+    "type": "他行直联上线",
+    "customer": "珠海交控",
+    "desc": "平安银行生产上线",
+    "cause": "",
+    "solution": "",
+    "solvedDate": "",
+    "status": "未解决",
+    "att": {
+      "desc": [],
+      "cause": [],
+      "solution": []
+    },
+    "handler": "苗子涵",
+    "note": ""
   }
 ]
